@@ -9,7 +9,8 @@ import type { Racer } from "./race";
 export type RoundData =
   | { game: "snail"; racers: Racer[]; odds: OddsTable; tickMs: number; raceMs: number }
   | { game: "oddeven"; drawMs: number }
-  | { game: "crash"; maxMult: number; runMs: number };
+  | { game: "crash"; maxMult: number; runMs: number }
+  | { game: "bingo"; card: number[]; drawCount: number; drawMs: number };
 
 export type PublicRound = {
   game: GameId;

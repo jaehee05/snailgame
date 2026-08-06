@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 
 import { History, MyBets } from "@/components/BetList";
+import { RoundHeader } from "@/components/RoundHeader";
 import { BetPanel } from "@/components/BetPanel";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
 import { Track } from "@/components/Track";
 import type { BetKind } from "@/lib/bets";
-import { api, formatClock, useMe, useRound } from "@/lib/client";
+import { api, useMe, useRound } from "@/lib/client";
 import { FIELD, type Phase } from "@/lib/config";
 import { SNAIL_FINISH_AT, SNAIL_RESULT_AT, SNAIL_ROUND_MS, SNAIL_TIMING } from "@/lib/games/snail";
 import { simulate } from "@/lib/race";
@@ -101,16 +102,13 @@ export default function SnailPage() {
     <GameShell me={me} notice={notice} onDismissNotice={() => setNotice(null)}>
       <main className="layout">
         <section className="stage">
-          <div className="stage-head">
-            <div>
-              <span className="round-no">#{round.id}</span>
-              <span className={`phase phase-${shownPhase}`}>{PHASE_LABEL[shownPhase]}</span>
-            </div>
-            <span className="clock">{formatClock(shownRemaining)}</span>
-          </div>
-          <div className="phase-bar">
-            <div style={{ width: `${Math.min(100, phaseProgress * 100)}%` }} />
-          </div>
+          <RoundHeader
+            roundId={round.id}
+            phase={shownPhase}
+            label={PHASE_LABEL[shownPhase]}
+            remaining={shownRemaining}
+            progress={phaseProgress}
+          />
 
           <Track
             racers={data.racers}

@@ -122,10 +122,11 @@ function summaryText(game: GameId, summary: number[] | undefined): string {
     return `${n} (${n % 2 === 1 ? "홀" : "짝"}·${n > 50 ? "대" : "소"})`;
   }
   if (game === "crash") return formatMult(s[0]);
+  if (game === "bingo") return `${s[0]}줄`;
   return s.map((lane) => lane + 1).join(" → ");
 }
 
-/** 세 게임의 결과가 시간순으로 섞여서 쌓인다. */
+/** 모든 게임의 결과가 시간순으로 섞여서 쌓인다. */
 export function History({ results }: { results: RoundResult[] }) {
   return (
     <div className="panel">

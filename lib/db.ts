@@ -6,6 +6,7 @@ import { hashPassword, newUid, verifyPassword } from "./auth-session";
 import { isValidSelection, oddsFor, payoutOf, type BetKind, type PlacedBet } from "./bets";
 import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
+import { bingoHit, bingoOdds, buildCard, drawBalls, isBingoSelection, lineCountOf } from "./games/bingo";
 import {
   CRASH_TIMING,
   crashSettle,
@@ -24,7 +25,7 @@ import {
   snailCore,
   snailOutcome,
 } from "./round";
-import { secretSeedOf } from "./seeds";
+import { publicSeedOf, secretSeedOf } from "./seeds";
 
 export type UserDoc = {
   uid: string;
@@ -220,6 +221,10 @@ function validateAndPrice(
       if (sel.kind !== "ride") throw new Error("베팅 종류가 올바르지 않습니다.");
       return { odds: 1 }; // 실제 배당은 인출 시점에 정해진다
     }
+    case "bingo": {
+      if (!isBingoSelection(sel)) throw new Error("베팅 종류가 올바르지 않습니다.");
+      return { odds: bingoOdds(sel) };
+    }
   }
 }
 
@@ -325,7 +330,8 @@ export async function cashOut(
 type GameOutcome =
   | { game: "snail"; order: number[] }
   | { game: "oddeven"; draw: ReturnType<typeof oddEvenOutcome> }
-  | { game: "crash"; crashPoint: number };
+  | { game: "crash"; crashPoint: number }
+  | { game: "bingo"; lines: number };
 
 function outcomeOf(game: GameId, roundId: number): GameOutcome {
   switch (game) {
@@ -335,6 +341,11 @@ function outcomeOf(game: GameId, roundId: number): GameOutcome {
       return { game: "oddeven", draw: oddEvenOutcome(secretSeedOf("oddeven", roundId)) };
     case "crash":
       return { game: "crash", crashPoint: crashPointOfRound(roundId) };
+    case "bingo": {
+      const card = buildCard(publicSeedOf("bingo", roundId));
+      const balls = drawBalls(secretSeedOf("bingo", roundId));
+      return { game: "bingo", lines: lineCountOf(card, balls) };
+    }
   }
 }
 
@@ -351,6 +362,10 @@ function settleOne(bet: PlacedBet, outcome: GameOutcome): { hit: boolean; payout
       const { hit, payout } = crashSettle(bet.amount, extra, outcome.crashPoint);
       return { hit, payout };
     }
+    case "bingo": {
+      const hit = bingoHit({ kind: bet.kind, picks: bet.picks }, outcome.lines);
+      return { hit, payout: hit ? Math.floor(bet.amount * bet.odds) : 0 };
+    }
   }
 }
 
@@ -362,6 +377,8 @@ function summaryOf(outcome: GameOutcome): number[] {
       return [outcome.draw.number];
     case "crash":
       return [outcome.crashPoint];
+    case "bingo":
+      return [outcome.lines];
   }
 }
 

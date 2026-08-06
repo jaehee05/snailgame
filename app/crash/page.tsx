@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { History } from "@/components/BetList";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
+import { RoundHeader } from "@/components/RoundHeader";
 import { api, formatClock, formatCoins, formatMult, useMe, useRound } from "@/lib/client";
 import { MIN_BET } from "@/lib/config";
 import {
@@ -129,15 +130,17 @@ export default function CrashPage() {
     <GameShell me={me} notice={notice} onDismissNotice={() => setNotice(null)}>
       <main className="layout">
         <section className="stage">
-          <div className="stage-head">
-            <div>
-              <span className="round-no">#{round.id}</span>
-              <span className={`phase phase-${open ? "betting" : crashed ? "result" : "racing"}`}>
-                {open ? "베팅 접수 중" : crashed ? "종료" : "상승 중"}
-              </span>
-            </div>
-            <span className="clock">{formatClock(remaining)}</span>
-          </div>
+          <RoundHeader
+            roundId={round.id}
+            phase={open ? "betting" : crashed ? "result" : "racing"}
+            label={open ? "베팅 접수 중" : crashed ? "종료" : "상승 중"}
+            remaining={remaining}
+            progress={
+              open
+                ? 1 - remaining / CRASH_TIMING.betMs
+                : Math.min(1, runElapsed / CRASH_TIMING.runMs)
+            }
+          />
 
           <div className={`crash-stage${crashed ? " is-crashed" : ""}`}>
             <svg viewBox="0 0 100 60" preserveAspectRatio="none" className="crash-chart">

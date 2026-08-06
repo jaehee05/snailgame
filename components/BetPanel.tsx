@@ -6,9 +6,8 @@ import { BET_KINDS, BET_META, oddsFor, type BetKind, type OddsTable } from "@/li
 import { formatCoins } from "@/lib/client";
 import { MIN_BET } from "@/lib/config";
 import type { Racer } from "@/lib/race";
+import { BetAmount } from "./BetAmount";
 import { SnailIcon } from "./SnailIcon";
-
-const CHIPS = [100, 500, 1_000, 5_000, 10_000];
 
 export function BetPanel({
   racers,
@@ -114,54 +113,19 @@ export function BetPanel({
         })}
       </div>
 
-      <div className="amount-row">
-        {CHIPS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className="chip"
-            disabled={!open}
-            onClick={() => setAmount((a) => Math.min(balance, a + c))}
-          >
-            +{formatCoins(c)}
-          </button>
-        ))}
-        <button type="button" className="chip chip-ghost" disabled={!open} onClick={() => setAmount(MIN_BET)}>
-          초기화
-        </button>
-      </div>
+      <BetAmount
+        amount={amount}
+        setAmount={setAmount}
+        balance={balance}
+        disabled={!open}
+        odds={currentOdds ?? undefined}
+      />
 
-      <label className="amount-input">
-        <span>베팅 금액</span>
-        <input
-          type="number"
-          min={MIN_BET}
-          step={100}
-          value={amount}
-          disabled={!open}
-          onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-        />
-        <button type="button" className="chip" disabled={!open} onClick={() => setAmount(balance)}>
-          올인
-        </button>
-      </label>
-
-      <div className="payout-preview">
-        {complete ? (
-          <>
-            <span>
-              배당 <strong>{currentOdds!.toFixed(2)}배</strong>
-            </span>
-            <span>
-              적중 시 <strong>{formatCoins(Math.floor(amount * currentOdds!))}</strong> 코인
-            </span>
-          </>
-        ) : (
-          <span className="muted">
-            달팽이 {meta.picks}마리를 {meta.ordered ? "순서대로 " : ""}고르세요
-          </span>
-        )}
-      </div>
+      {!complete && (
+        <p className="muted small center">
+          달팽이 {meta.picks}마리를 {meta.ordered ? "순서대로 " : ""}고르세요
+        </p>
+      )}
 
       {error && <p className="error">{error}</p>}
 

@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { BetAmount } from "@/components/BetAmount";
 import { History, MyOddEvenBets } from "@/components/BetList";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
-import { api, formatClock, formatCoins, useMe, useRound } from "@/lib/client";
+import { RoundHeader } from "@/components/RoundHeader";
+import { api, formatCoins, useMe, useRound } from "@/lib/client";
 import { MIN_BET } from "@/lib/config";
 import {
   ODDEVEN_BETS,
@@ -17,8 +19,6 @@ import {
   rollingNumber,
   type OddEvenKind,
 } from "@/lib/games/oddeven";
-
-const CHIPS = [100, 500, 1_000, 5_000, 10_000];
 
 type Phase = "betting" | "drawing" | "result";
 
@@ -94,15 +94,17 @@ export default function OddEvenPage() {
     <GameShell me={me} notice={notice} onDismissNotice={() => setNotice(null)}>
       <main className="layout">
         <section className="stage">
-          <div className="stage-head">
-            <div>
-              <span className="round-no">#{round.id}</span>
-              <span className={`phase phase-${open ? "betting" : phase === "drawing" ? "racing" : "result"}`}>
-                {open ? "베팅 접수 중" : phase === "drawing" ? "추첨 중" : "결과 발표"}
-              </span>
-            </div>
-            <span className="clock">{formatClock(remaining)}</span>
-          </div>
+          <RoundHeader
+            roundId={round.id}
+            phase={open ? "betting" : phase === "drawing" ? "racing" : "result"}
+            label={open ? "베팅 접수 중" : phase === "drawing" ? "추첨 중" : "결과 발표"}
+            remaining={remaining}
+            progress={
+              open
+                ? 1 - remaining / ODDEVEN_TIMING.betMs
+                : Math.min(1, (elapsed - ODDEVEN_TIMING.betMs) / ODDEVEN_TIMING.drawMs)
+            }
+          />
 
           <div className="draw-stage">
             <div className={`draw-ball${phase === "drawing" ? " is-rolling" : ""}`}>
@@ -147,57 +149,13 @@ export default function OddEvenPage() {
 
             <p className="kind-desc">{ODDEVEN_BETS[kind].desc}</p>
 
-            <div className="amount-row">
-              {CHIPS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  className="chip"
-                  disabled={!open}
-                  onClick={() => setAmount((a) => Math.min(me.user.balance, a + c))}
-                >
-                  +{formatCoins(c)}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="chip chip-ghost"
-                disabled={!open}
-                onClick={() => setAmount(MIN_BET)}
-              >
-                초기화
-              </button>
-            </div>
-
-            <label className="amount-input">
-              <span>베팅 금액</span>
-              <input
-                type="number"
-                min={MIN_BET}
-                step={100}
-                value={amount}
-                disabled={!open}
-                onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-              />
-              <button
-                type="button"
-                className="chip"
-                disabled={!open}
-                onClick={() => setAmount(me.user.balance)}
-              >
-                올인
-              </button>
-            </label>
-
-            <div className="payout-preview">
-              <span>
-                배당 <strong>{ODDEVEN_BETS[kind].odds.toFixed(2)}배</strong>
-              </span>
-              <span>
-                적중 시 <strong>{formatCoins(Math.floor(amount * ODDEVEN_BETS[kind].odds))}</strong>{" "}
-                코인
-              </span>
-            </div>
+            <BetAmount
+              amount={amount}
+              setAmount={setAmount}
+              balance={me.user.balance}
+              disabled={!open}
+              odds={ODDEVEN_BETS[kind].odds}
+            />
 
             {error && <p className="error">{error}</p>}
 

@@ -10,9 +10,10 @@ const HREF: Record<GameId, string> = {
   snail: "/",
   oddeven: "/oddeven",
   crash: "/crash",
+  bingo: "/bingo",
 };
 
-/** 세 게임이 공유하는 상단바와 탭. 잔액은 게임과 무관하게 하나다. */
+/** 모든 게임이 공유하는 상단바와 탭. 잔액은 게임과 무관하게 하나다. */
 export function GameShell({
   me,
   notice,
@@ -67,7 +68,7 @@ export function GameShell({
             className={`game-tab${pathname === HREF[id] ? " is-active" : ""}`}
           >
             <span className="game-tab-icon">{GAME_ICON[id]}</span>
-            {GAME_LABEL[id]}
+            <span className="game-tab-name">{GAME_LABEL[id]}</span>
           </Link>
         ))}
       </nav>

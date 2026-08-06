@@ -1,5 +1,11 @@
 import { buildOdds, type OddsTable } from "./bets";
 import { TICK_MS } from "./config";
+import {
+  BINGO_SETTLE_AT,
+  BINGO_TIMING,
+  buildCard,
+  DRAW_COUNT,
+} from "./games/bingo";
 import { CRASH_TIMING, crashAtOf, crashPointOf, MAX_MULT } from "./games/crash";
 import { ODDEVEN_SETTLE_AT, ODDEVEN_TIMING } from "./games/oddeven";
 import { SNAIL_FINISH_AT, SNAIL_ROUND_MS, SNAIL_TIMING } from "./games/snail";
@@ -17,6 +23,8 @@ export function timingOf(game: GameId): Timing {
       return { roundMs: ODDEVEN_TIMING.roundMs, betMs: ODDEVEN_TIMING.betMs };
     case "crash":
       return { roundMs: CRASH_TIMING.roundMs, betMs: CRASH_TIMING.betMs };
+    case "bingo":
+      return { roundMs: BINGO_TIMING.roundMs, betMs: BINGO_TIMING.betMs };
   }
 }
 
@@ -65,6 +73,8 @@ export function settleAtOf(game: GameId, roundId: number): number {
       return ODDEVEN_SETTLE_AT;
     case "crash":
       return crashAtOf(secretSeedOf("crash", roundId));
+    case "bingo":
+      return BINGO_SETTLE_AT;
   }
 }
 
@@ -81,7 +91,8 @@ export function isBettingOpen(game: GameId, roundId: number, now: number): boole
 export type RoundData =
   | { game: "snail"; racers: Racer[]; odds: OddsTable; tickMs: number; raceMs: number }
   | { game: "oddeven"; drawMs: number }
-  | { game: "crash"; maxMult: number; runMs: number };
+  | { game: "crash"; maxMult: number; runMs: number }
+  | { game: "bingo"; card: number[]; drawCount: number; drawMs: number };
 
 export type PublicRound = {
   game: GameId;
@@ -110,6 +121,13 @@ function roundData(game: GameId, roundId: number): RoundData {
       return { game: "oddeven", drawMs: ODDEVEN_TIMING.drawMs };
     case "crash":
       return { game: "crash", maxMult: MAX_MULT, runMs: CRASH_TIMING.runMs };
+    case "bingo":
+      return {
+        game: "bingo",
+        card: buildCard(publicSeedOf("bingo", roundId)),
+        drawCount: DRAW_COUNT,
+        drawMs: BINGO_TIMING.drawMs,
+      };
   }
 }
 
