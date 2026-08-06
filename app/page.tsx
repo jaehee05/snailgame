@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { History, MyBets } from "@/components/BetList";
 import { BetPanel } from "@/components/BetPanel";
@@ -31,11 +31,16 @@ export default function GamePage() {
   const { round, prev, elapsed, phase, remaining, error: roundError } = useRound();
   const [me, setMe] = useState<MeState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [fatal, setFatal] = useState<string | null>(null);
+
+  const loadedOnce = useRef(false);
 
   const loadMe = useCallback(async () => {
     try {
       const data = await api<MeState>("/api/me");
+      loadedOnce.current = true;
       setMe(data);
+      setFatal(null);
       if (data.justSettled.length > 0) {
         const net = data.justSettled.reduce((s, r) => s + r.returned - r.staked, 0);
         setNotice(`지난 회차 정산: ${net >= 0 ? "+" : ""}${formatCoins(net)} 코인`);
@@ -45,7 +50,10 @@ export default function GamePage() {
         router.replace("/login");
         return;
       }
-      setNotice(err instanceof Error ? err.message : "상태를 불러오지 못했습니다.");
+      const message = err instanceof Error ? err.message : "상태를 불러오지 못했습니다.";
+      // 아직 한 번도 못 불러왔다면 게임 화면 대신 오류를 보여준다.
+      if (loadedOnce.current) setNotice(message);
+      else setFatal(message);
     }
   }, [router]);
 
@@ -108,8 +116,10 @@ export default function GamePage() {
     [round, loadMe]
   );
 
-  if (!round) {
-    return <main className="center-screen">{roundError ?? "회차 정보를 불러오는 중…"}</main>;
+  // 로그인 여부가 확인되기 전에는 게임 화면을 그리지 않는다.
+  if (fatal) return <main className="center-screen">{fatal}</main>;
+  if (!round || !me) {
+    return <main className="center-screen">{roundError ?? "불러오는 중…"}</main>;
   }
 
   const phaseProgress =
