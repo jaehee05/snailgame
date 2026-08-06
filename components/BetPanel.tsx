@@ -24,7 +24,8 @@ export function BetPanel({
 }) {
   const [kind, setKind] = useState<BetKind>("win");
   const [picks, setPicks] = useState<number[]>([]);
-  const [amount, setAmount] = useState(1_000);
+  // 기본값은 비워 둔다 (입력칸에 "금액 입력" 안내만 뜬다)
+  const [amount, setAmount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

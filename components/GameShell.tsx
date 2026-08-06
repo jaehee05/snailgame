@@ -57,12 +57,22 @@ export function GameShell({
   const [menuOpen, setMenuOpen] = useState(false);
   const balance = useCountUp(me?.user.balance ?? 0);
 
-  // 안내 문구는 3초 뒤 사라진다 (누르면 바로 닫힌다).
+  /*
+   * 안내 문구는 3초 뒤 사라진다 (누르면 바로 닫힌다).
+   * 닫기 콜백은 화면마다 인라인으로 넘어와 렌더마다 새로 만들어진다. 그걸
+   * 그대로 의존성에 두면 시계가 흐를 때마다 타이머가 초기화돼서 영영 안
+   * 닫힌다. 그래서 콜백은 ref 에 담아 두고 문구가 바뀔 때만 타이머를 건다.
+   */
+  const dismiss = useRef(onDismissNotice);
+  useEffect(() => {
+    dismiss.current = onDismissNotice;
+  });
+
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(onDismissNotice, 3000);
+    const t = setTimeout(() => dismiss.current(), 3000);
     return () => clearTimeout(t);
-  }, [notice, onDismissNotice]);
+  }, [notice]);
 
   useEffect(() => {
     if (!menuOpen) return;

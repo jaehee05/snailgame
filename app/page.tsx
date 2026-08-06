@@ -68,11 +68,17 @@ export default function SnailPage() {
         : SNAIL_ROUND_MS - elapsed
   );
 
+  const currentRoundId = round?.id;
+  const myBets = useMemo(
+    () => (me?.bets ?? []).filter((b) => b.roundId === currentRoundId),
+    [me?.bets, currentRoundId]
+  );
+
   const picked = useMemo(() => {
     const set = new Set<number>();
-    for (const bet of me?.bets ?? []) for (const p of bet.picks) set.add(p);
+    for (const bet of myBets) for (const p of bet.picks) set.add(p);
     return set;
-  }, [me?.bets]);
+  }, [myBets]);
 
   const placeBet = useCallback(
     async (kind: BetKind, picks: number[], amount: number) => {
@@ -138,7 +144,7 @@ export default function SnailPage() {
             open={shownPhase === "betting"}
             onPlace={placeBet}
           />
-          <MyBets bets={me.bets} racers={data.racers} order={shownOrder} />
+          <MyBets bets={myBets} racers={data.racers} order={shownOrder} />
         </aside>
 
         <section className="bottom">

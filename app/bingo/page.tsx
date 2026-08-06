@@ -77,7 +77,8 @@ export default function BingoPage() {
   }, [picks]);
 
   const complete = isValidPicks(picks);
-  const tickets = me?.bets ?? [];
+  // 회차가 막 바뀐 직후 이전 회차 내역이 잠깐 남아 보이지 않도록 걸러 낸다.
+  const tickets = (me?.bets ?? []).filter((b) => b.roundId === round?.id);
 
   function toggle(n: number) {
     if (!open) return;

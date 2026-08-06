@@ -28,7 +28,8 @@ export default function CrashPage() {
   const redirect = useCallback(() => router.replace("/login"), [router]);
   const { me, notice, setNotice, fatal, loadMe } = useMe("crash", round?.id, redirect);
 
-  const [amount, setAmount] = useState(1_000);
+  // 기본값은 비워 둔다 (입력칸에 "금액 입력" 안내만 뜬다)
+  const [amount, setAmount] = useState(0);
   const [useAuto, setUseAuto] = useState(false);
   const [autoTarget, setAutoTarget] = useState(2);
   const [busy, setBusy] = useState(false);
@@ -50,7 +51,7 @@ export default function CrashPage() {
     ? (crashPoint ?? 1)
     : Math.min(crashPoint ?? MAX_MULT, multAt(Math.max(0, runElapsed)));
 
-  const myBet = me?.bets[0] ?? null;
+  const myBet = (me?.bets ?? []).find((b) => b.roundId === round?.id) ?? null;
   const cashedOut = myBet?.cashoutMult ?? null;
 
   useEffect(() => {

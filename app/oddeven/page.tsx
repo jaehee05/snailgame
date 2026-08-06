@@ -30,7 +30,8 @@ export default function OddEvenPage() {
   const { me, notice, setNotice, fatal, loadMe } = useMe("oddeven", round?.id, redirect);
 
   const [kind, setKind] = useState<OddEvenKind>("odd");
-  const [amount, setAmount] = useState(1_000);
+  // 기본값은 비워 둔다 (입력칸에 "금액 입력" 안내만 뜬다)
+  const [amount, setAmount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,7 +166,10 @@ export default function OddEvenPage() {
             </button>
           </div>
 
-          <MyOddEvenBets bets={me.bets} drawn={settled ? drawn.number : null} />
+          <MyOddEvenBets
+            bets={me.bets.filter((b) => b.roundId === round.id)}
+            drawn={settled ? drawn.number : null}
+          />
         </aside>
 
         <section className="bottom">

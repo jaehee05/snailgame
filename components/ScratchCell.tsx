@@ -6,6 +6,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const REVEAL_AT = 0.45;
 const BRUSH = 16;
 
+/*
+ * 문지르는 동안에는 화면이 절대 밀리면 안 된다.
+ * 칸에만 touch-action 을 걸면 손가락이 칸 밖으로 조금만 벗어나도 스크롤이
+ * 시작돼 버리므로, 긁는 중에는 문서 전체의 터치 이동을 막는다.
+ */
+let scratching = 0;
+const blockTouch = (e: TouchEvent) => e.preventDefault();
+
+function holdScroll() {
+  if (scratching++ === 0) {
+    document.addEventListener("touchmove", blockTouch, { passive: false });
+  }
+}
+
+function releaseScroll() {
+  if (scratching > 0 && --scratching === 0) {
+    document.removeEventListener("touchmove", blockTouch);
+  }
+}
+
 function paintFoil(canvas: HTMLCanvasElement) {
   const rect = canvas.getBoundingClientRect();
   if (rect.width === 0) return false;
@@ -77,16 +97,16 @@ export function ScratchCell({
     // 레이아웃이 잡힌 뒤에 그려야 크기가 0 이 아니다.
     const id = requestAnimationFrame(() => setReady(paintFoil(canvas)));
 
-    // touch-action 만으로는 부족하다. 문지르는 동안 화면이 따라 스크롤되면
-    // 긁을 수가 없으므로 이 칸 위의 터치 이동은 직접 막는다.
-    const block = (e: TouchEvent) => e.preventDefault();
-    canvas.addEventListener("touchmove", block, { passive: false });
-
-    return () => {
-      cancelAnimationFrame(id);
-      canvas.removeEventListener("touchmove", block);
-    };
+    return () => cancelAnimationFrame(id);
   }, [revealed]);
+
+  // 긁다 만 채로 화면을 벗어나도 잠금이 남지 않게 한다.
+  useEffect(() => () => {
+    if (drawing.current) {
+      drawing.current = false;
+      releaseScroll();
+    }
+  }, []);
 
   const rub = useCallback(
     (x: number, y: number) => {
@@ -114,6 +134,13 @@ export function ScratchCell({
     [onReveal]
   );
 
+  function stop() {
+    if (!drawing.current) return;
+    drawing.current = false;
+    last.current = null;
+    releaseScroll();
+  }
+
   function pointerPos(e: React.PointerEvent) {
     const rect = e.currentTarget.getBoundingClientRect();
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -128,6 +155,7 @@ export function ScratchCell({
           className={`scell-foil${ready ? "" : " is-blank"}`}
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
+            if (!drawing.current) holdScroll();
             drawing.current = true;
             last.current = null;
             const { x, y } = pointerPos(e);
@@ -138,14 +166,9 @@ export function ScratchCell({
             const { x, y } = pointerPos(e);
             rub(x, y);
           }}
-          onPointerUp={() => {
-            drawing.current = false;
-            last.current = null;
-          }}
-          onPointerCancel={() => {
-            drawing.current = false;
-            last.current = null;
-          }}
+          onPointerUp={stop}
+          onPointerCancel={stop}
+          onPointerLeave={stop}
         />
       )}
     </div>

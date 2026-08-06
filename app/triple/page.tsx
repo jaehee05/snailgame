@@ -130,7 +130,7 @@ export default function TriplePage() {
             </div>
           ) : (
             <>
-              <div className="tl-panels">
+              <div className={`tl-panels${allRevealed ? "" : " is-scratching"}`}>
                 {ticket.result.panels.map((symbols, i) => {
                   const open = revealed[i].every(Boolean);
                   const win = open && ticket.result.winPanel === i;

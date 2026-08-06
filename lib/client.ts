@@ -161,6 +161,9 @@ export function useMe(game: GameId, roundId: number | undefined, onRedirect: () 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
     loadMe();
+    // 회차 전환을 놓쳐도 오래 어긋나 있지 않도록 주기적으로 맞춘다.
+    const t = setInterval(loadMe, 20_000);
+    return () => clearInterval(t);
   }, [roundId, loadMe]);
 
   return { me, setMe, notice, setNotice, fatal, loadMe };

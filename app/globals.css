@@ -1398,12 +1398,8 @@ textarea,
   user-select: text;
 }
 
-/* 긁는 동안 화면이 밀리지 않도록 */
-.tl-cells,
-.tl-panels {
-  touch-action: pan-y;
-}
-
-.tl-cells .scell {
+/* 아직 긁을 칸이 남아 있으면 카드 위에서는 화면이 밀리지 않는다 */
+.tl-panels.is-scratching,
+.tl-panels.is-scratching * {
   touch-action: none;
 }
