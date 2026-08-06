@@ -114,13 +114,15 @@ function hitOddEven(kind: OddEvenKind, odd: boolean, high: boolean): boolean {
   }
 }
 
-function summaryText(game: GameId, summary: number[]): string {
-  if (game === "snail") return summary.map((lane) => lane + 1).join(" → ");
+function summaryText(game: GameId, summary: number[] | undefined): string {
+  const s = summary ?? [];
+  if (s.length === 0) return "-";
   if (game === "oddeven") {
-    const n = summary[0];
+    const n = s[0];
     return `${n} (${n % 2 === 1 ? "홀" : "짝"}·${n > 50 ? "대" : "소"})`;
   }
-  return formatMult(summary[0]);
+  if (game === "crash") return formatMult(s[0]);
+  return s.map((lane) => lane + 1).join(" → ");
 }
 
 /** 세 게임의 결과가 시간순으로 섞여서 쌓인다. */
@@ -138,7 +140,7 @@ export function History({ results }: { results: RoundResult[] }) {
             const net = r.returned - r.staked;
             return (
               <li key={`${r.game}_${r.roundId}`}>
-                <span title={r.game}>{GAME_ICON[r.game]}</span>
+                <span title={r.game}>{GAME_ICON[r.game] ?? "🎲"}</span>
                 <span className="history-order">{summaryText(r.game, r.summary)}</span>
                 <span className={net >= 0 ? "net-up" : "net-down"}>
                   {net >= 0 ? "+" : ""}

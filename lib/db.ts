@@ -187,7 +187,16 @@ export async function recentResults(uid: string, limit = 20): Promise<RoundResul
     .orderBy("at", "desc")
     .limit(limit)
     .get();
-  return snap.docs.map((d) => d.data() as RoundResult);
+  return snap.docs.map((d) => {
+    // 달팽이 하나뿐이던 시절 기록에는 game 이 없고 순위가 order 에 들어 있다.
+    const raw = d.data() as RoundResult & { order?: number[] };
+    return {
+      ...raw,
+      game: raw.game ?? "snail",
+      summary: raw.summary ?? raw.order ?? [],
+      bets: raw.bets ?? [],
+    };
+  });
 }
 
 /** 게임별로 베팅이 성립하는지 확인하고 서버가 배당을 다시 계산한다. */
