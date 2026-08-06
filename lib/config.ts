@@ -13,7 +13,7 @@ export const MAX_TICKS = Math.floor(RACE_MS / TICK_MS);
 /** 트랙 길이 (임의 단위) */
 export const TRACK = 1000;
 /** 틱당 기본 이동거리 → 평균 완주 약 22초 */
-export const BASE_SPEED = 4.6;
+export const BASE_SPEED = 5.8;
 
 /** 회차당 출전 마릿수 */
 export const FIELD = 4;

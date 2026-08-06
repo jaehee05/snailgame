@@ -36,6 +36,21 @@ export type Racer = {
   grit: number;
 };
 
+/*
+ * 밸런스 메모.
+ * 틱마다 독립적인 잡음은 220틱을 지나면 평균으로 수렴해 버려서, 기본 속도가
+ * 조금만 높아도 그 달팽이가 거의 확정적으로 이긴다. 실제로 그렇게 만들었더니
+ * 인기마 승률 중앙값이 55%, 심한 회차는 98%까지 나왔다.
+ * 그래서 기본 속도 차이는 좁히고(±4%), 대신 오래 지속되는 큰 사건(질주 / 낮잠)으로
+ * 변동을 만든다. 이런 사건은 평균으로 상쇄되지 않아서 역전이 나온다.
+ */
+const BOOST_MULT = 2.2;
+const STALL_MULT = 0.15;
+const BOOST_CHANCE = 0.024;
+const STALL_CHANCE = 0.022;
+/** 이 틱 이후로는 낮잠이 시작되지 않는다 (제한 시간 내 완주 보장) */
+const STALL_CUTOFF = MAX_TICKS - 90;
+
 /** 공개 시드로부터 출전표를 만든다. 베팅 시작 시점에 모두에게 공개된다. */
 export function buildLineup(publicSeed: string): Racer[] {
   const rnd = rngFromSeed(`lineup:${publicSeed}`);
@@ -43,9 +58,9 @@ export function buildLineup(publicSeed: string): Racer[] {
   return picked.map((char, lane) => ({
     lane,
     char,
-    speed: 0.88 + rnd() * 0.24,
-    burst: 0.15 + rnd() * 0.85,
-    stall: 0.15 + rnd() * 0.7,
+    speed: 0.96 + rnd() * 0.08,
+    burst: 0.2 + rnd() * 0.8,
+    stall: 0.2 + rnd() * 0.8,
     grit: 0.3 + rnd() * 0.7,
   }));
 }
@@ -81,18 +96,21 @@ export function simulate(racers: Racer[], seed: string, record = false): RaceOut
 
       let mult = 1;
       if (boost[i] > 0) {
-        mult = 1.8;
+        mult = BOOST_MULT;
         boost[i]--;
       } else if (stall[i] > 0) {
-        mult = 0.22;
+        mult = STALL_MULT;
         stall[i]--;
       } else {
         const roll = rnd();
-        if (roll < r.burst * 0.018) boost[i] = 8 + Math.floor(rnd() * 12);
-        else if (roll > 1 - r.stall * 0.016) stall[i] = 6 + Math.floor(rnd() * 10);
+        if (roll < r.burst * BOOST_CHANCE) boost[i] = 15 + Math.floor(rnd() * 20);
+        // 막판에 낮잠이 들면 제한 시간 안에 못 들어와 화면에서 멈춰 버린다.
+        else if (t < STALL_CUTOFF && roll > 1 - r.stall * STALL_CHANCE) {
+          stall[i] = 12 + Math.floor(rnd() * 22);
+        }
       }
 
-      const noise = 1 + (rnd() * 2 - 1) * 0.4 * (1 - r.grit);
+      const noise = 1 + (rnd() * 2 - 1) * 0.35 * (1 - r.grit);
       const v = BASE_SPEED * r.speed * mult * Math.max(0.15, noise);
       const prev = pos[i];
       pos[i] = prev + v;
