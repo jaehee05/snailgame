@@ -4,9 +4,10 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { hashPassword, newUid, verifyPassword } from "./auth-session";
 import { isValidSelection, oddsFor, payoutOf, type BetKind, type PlacedBet } from "./bets";
+import { drawTriple, TRIPLE_PRICE, type TripleResult } from "./games/triple";
 import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
-import { bingoHit, bingoOdds, buildCard, drawBalls, isBingoSelection, lineCountOf } from "./games/bingo";
+import { bestRank, drawBalls, isValidPicks, prizeOf, TICKET_PRICE } from "./games/bingo";
 import {
   CRASH_TIMING,
   crashSettle,
@@ -15,7 +16,7 @@ import {
   type CrashBetExtra,
 } from "./games/crash";
 import { isOddEvenSelection, oddEvenHit, oddEvenOdds, oddEvenOutcome } from "./games/oddeven";
-import type { GameId, Selection } from "./games/types";
+import type { GameId, RoundGameId, Selection } from "./games/types";
 import {
   crashPointOfRound,
   isBettingOpen,
@@ -25,7 +26,7 @@ import {
   snailCore,
   snailOutcome,
 } from "./round";
-import { publicSeedOf, secretSeedOf } from "./seeds";
+import { secretSeedOf } from "./seeds";
 
 export type UserDoc = {
   uid: string;
@@ -167,7 +168,7 @@ export async function listUsers(): Promise<PublicUser[]> {
 
 export async function betsForRound(
   uid: string,
-  game: GameId,
+  game: RoundGameId,
   roundId: number
 ): Promise<PlacedBet[]> {
   const snap = await adminDb()
@@ -202,7 +203,7 @@ export async function recentResults(uid: string, limit = 20): Promise<RoundResul
 
 /** 게임별로 베팅이 성립하는지 확인하고 서버가 배당을 다시 계산한다. */
 function validateAndPrice(
-  game: GameId,
+  game: RoundGameId,
   roundId: number,
   sel: Selection
 ): { odds: number } {
@@ -222,15 +223,18 @@ function validateAndPrice(
       return { odds: 1 }; // 실제 배당은 인출 시점에 정해진다
     }
     case "bingo": {
-      if (!isBingoSelection(sel)) throw new Error("베팅 종류가 올바르지 않습니다.");
-      return { odds: bingoOdds(sel) };
+      if (sel.kind !== "ticket") throw new Error("베팅 종류가 올바르지 않습니다.");
+      if (!isValidPicks(sel.picks)) {
+        throw new Error("B·I·G·O 5개씩, N 4개씩 모두 24개를 골라야 합니다.");
+      }
+      return { odds: 0 }; // 당첨금은 등수로 정해진다
     }
   }
 }
 
 export async function placeBet(
   uid: string,
-  game: GameId,
+  game: RoundGameId,
   roundId: number,
   sel: Selection,
   amount: number,
@@ -245,6 +249,9 @@ export async function placeBet(
   }
   if (game === "crash" && !isValidAutoTarget(autoTarget)) {
     throw new Error("자동 인출 배수가 올바르지 않습니다.");
+  }
+  if (game === "bingo" && amount !== TICKET_PRICE) {
+    throw new Error(`메가빙고는 한 장에 ${TICKET_PRICE.toLocaleString()} 코인입니다.`);
   }
 
   const { odds } = validateAndPrice(game, roundId, sel);
@@ -331,9 +338,9 @@ type GameOutcome =
   | { game: "snail"; order: number[] }
   | { game: "oddeven"; draw: ReturnType<typeof oddEvenOutcome> }
   | { game: "crash"; crashPoint: number }
-  | { game: "bingo"; lines: number };
+  | { game: "bingo"; balls: number[] };
 
-function outcomeOf(game: GameId, roundId: number): GameOutcome {
+function outcomeOf(game: RoundGameId, roundId: number): GameOutcome {
   switch (game) {
     case "snail":
       return { game: "snail", order: snailOutcome(roundId).order };
@@ -341,11 +348,8 @@ function outcomeOf(game: GameId, roundId: number): GameOutcome {
       return { game: "oddeven", draw: oddEvenOutcome(secretSeedOf("oddeven", roundId)) };
     case "crash":
       return { game: "crash", crashPoint: crashPointOfRound(roundId) };
-    case "bingo": {
-      const card = buildCard(publicSeedOf("bingo", roundId));
-      const balls = drawBalls(secretSeedOf("bingo", roundId));
-      return { game: "bingo", lines: lineCountOf(card, balls) };
-    }
+    case "bingo":
+      return { game: "bingo", balls: drawBalls(secretSeedOf("bingo", roundId)) };
   }
 }
 
@@ -363,8 +367,8 @@ function settleOne(bet: PlacedBet, outcome: GameOutcome): { hit: boolean; payout
       return { hit, payout };
     }
     case "bingo": {
-      const hit = bingoHit({ kind: bet.kind, picks: bet.picks }, outcome.lines);
-      return { hit, payout: hit ? Math.floor(bet.amount * bet.odds) : 0 };
+      const rank = bestRank(bet.picks, new Set(outcome.balls));
+      return { hit: rank > 0, payout: prizeOf(rank) };
     }
   }
 }
@@ -378,7 +382,7 @@ function summaryOf(outcome: GameOutcome): number[] {
     case "crash":
       return [outcome.crashPoint];
     case "bingo":
-      return [outcome.lines];
+      return outcome.balls;
   }
 }
 
@@ -393,11 +397,13 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   if (pending.empty) return [];
 
   // (게임, 회차) 단위로 묶는다
-  const groups = new Map<string, { game: GameId; roundId: number; docs: typeof pending.docs }>();
+  const groups = new Map<string, { game: RoundGameId; roundId: number; docs: typeof pending.docs }>();
   for (const doc of pending.docs) {
     const data = doc.data() as PlacedBet;
     // 게임이 하나뿐이던 시절의 베팅에는 game 필드가 없다.
-    const game: GameId = data.game ?? "snail";
+    const game = (data.game ?? "snail") as RoundGameId;
+    // 트리플럭은 즉석 정산이라 여기 올 일이 없다.
+    if (game === ("triple" as RoundGameId)) continue;
     const { roundId } = data;
     if (!isRoundFinished(game, roundId, now)) continue;
     const key = `${game}:${roundId}`;
@@ -458,6 +464,70 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   return results;
 }
 
+
+/* ── 트리플럭 (즉석복권) ─────────────────────────── */
+
+export type ScratchTicket = {
+  id: string;
+  seed: string;
+  result: TripleResult;
+  balance: number;
+  at: number;
+};
+
+/**
+ * 즉석복권 한 장. 회차가 없으므로 사는 즉시 결과가 정해지고 바로 정산된다.
+ * 결과는 서버가 만든 문서 ID 로 만든 시드에서 나오므로 미리 알 수 없고,
+ * 시드를 같이 돌려주기 때문에 사후에 직접 다시 계산해 볼 수 있다.
+ */
+export async function buyScratch(uid: string, now: number): Promise<ScratchTicket> {
+  const db = adminDb();
+  const userRef = db.collection("users").doc(uid);
+  const betRef = userRef.collection("bets").doc();
+  const seed = `${betRef.id}:${uid}`;
+  const result = drawTriple(seed);
+
+  const balance = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists) throw new Error("사용자를 찾을 수 없습니다.");
+    const user = snap.data() as UserDoc;
+    if (user.balance < TRIPLE_PRICE) throw new Error("잔액이 부족합니다.");
+
+    tx.set(betRef, {
+      id: betRef.id,
+      game: "triple",
+      roundId: Math.floor(now / 1000),
+      kind: "scratch",
+      picks: [],
+      amount: TRIPLE_PRICE,
+      odds: 0,
+      settled: true,
+      hit: result.prize > 0,
+      payout: result.prize,
+      createdAt: now,
+    });
+
+    tx.set(userRef.collection("results").doc(`triple_${betRef.id}`), {
+      game: "triple",
+      roundId: Math.floor(now / 1000),
+      summary: [result.rank, result.bonusRank],
+      staked: TRIPLE_PRICE,
+      returned: result.prize,
+      bets: [],
+      at: now,
+    });
+
+    tx.update(userRef, {
+      balance: FieldValue.increment(result.prize - TRIPLE_PRICE),
+      staked: FieldValue.increment(TRIPLE_PRICE),
+      returned: FieldValue.increment(result.prize),
+    });
+
+    return user.balance - TRIPLE_PRICE + result.prize;
+  });
+
+  return { id: betRef.id, seed, result, balance, at: now };
+}
 
 /* ── 관리자 ───────────────────────────────────────── */
 

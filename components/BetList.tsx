@@ -122,7 +122,11 @@ function summaryText(game: GameId, summary: number[] | undefined): string {
     return `${n} (${n % 2 === 1 ? "홀" : "짝"}·${n > 50 ? "대" : "소"})`;
   }
   if (game === "crash") return formatMult(s[0]);
-  if (game === "bingo") return `${s[0]}줄`;
+  if (game === "bingo") return `${s.length}개 추첨`;
+  if (game === "triple") {
+    if (s[1] > 0) return `보너스 ${s[1]}등`;
+    return s[0] > 0 ? `${s[0]}등` : "꽝";
+  }
   return s.map((lane) => lane + 1).join(" → ");
 }
 

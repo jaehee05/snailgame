@@ -1,21 +1,16 @@
 import { buildOdds, type OddsTable } from "./bets";
 import { TICK_MS } from "./config";
-import {
-  BINGO_SETTLE_AT,
-  BINGO_TIMING,
-  buildCard,
-  DRAW_COUNT,
-} from "./games/bingo";
+import { BINGO_SETTLE_AT, BINGO_TIMING, DRAW_COUNT } from "./games/bingo";
 import { CRASH_TIMING, crashAtOf, crashPointOf, MAX_MULT } from "./games/crash";
 import { ODDEVEN_SETTLE_AT, ODDEVEN_TIMING } from "./games/oddeven";
 import { SNAIL_FINISH_AT, SNAIL_ROUND_MS, SNAIL_TIMING } from "./games/snail";
-import type { GameId } from "./games/types";
+import type { RoundGameId } from "./games/types";
 import { buildLineup, simulate, type Racer, type RaceOutcome } from "./race";
 import { commitOf, publicSeedOf, secretSeedOf } from "./seeds";
 
 export type Timing = { roundMs: number; betMs: number };
 
-export function timingOf(game: GameId): Timing {
+export function timingOf(game: RoundGameId): Timing {
   switch (game) {
     case "snail":
       return { roundMs: SNAIL_ROUND_MS, betMs: SNAIL_TIMING.betMs };
@@ -28,11 +23,11 @@ export function timingOf(game: GameId): Timing {
   }
 }
 
-export function roundIdAt(game: GameId, now: number): number {
+export function roundIdAt(game: RoundGameId, now: number): number {
   return Math.floor(now / timingOf(game).roundMs);
 }
 
-export function roundStart(game: GameId, roundId: number): number {
+export function roundStart(game: RoundGameId, roundId: number): number {
   return roundId * timingOf(game).roundMs;
 }
 
@@ -65,7 +60,7 @@ export function snailOutcome(roundId: number): RaceOutcome {
 /* ── 회차 상태 ──────────────────────────────────────────── */
 
 /** 결과가 확정되는 시각 (회차 시작 기준 경과 ms) */
-export function settleAtOf(game: GameId, roundId: number): number {
+export function settleAtOf(game: RoundGameId, roundId: number): number {
   switch (game) {
     case "snail":
       return SNAIL_FINISH_AT;
@@ -78,11 +73,11 @@ export function settleAtOf(game: GameId, roundId: number): number {
   }
 }
 
-export function isRoundFinished(game: GameId, roundId: number, now: number): boolean {
+export function isRoundFinished(game: RoundGameId, roundId: number, now: number): boolean {
   return now - roundStart(game, roundId) >= settleAtOf(game, roundId);
 }
 
-export function isBettingOpen(game: GameId, roundId: number, now: number): boolean {
+export function isBettingOpen(game: RoundGameId, roundId: number, now: number): boolean {
   const elapsed = now - roundStart(game, roundId);
   return elapsed >= 0 && elapsed < timingOf(game).betMs;
 }
@@ -92,10 +87,10 @@ export type RoundData =
   | { game: "snail"; racers: Racer[]; odds: OddsTable; tickMs: number; raceMs: number }
   | { game: "oddeven"; drawMs: number }
   | { game: "crash"; maxMult: number; runMs: number }
-  | { game: "bingo"; card: number[]; drawCount: number; drawMs: number };
+  | { game: "bingo"; drawCount: number; drawMs: number };
 
 export type PublicRound = {
-  game: GameId;
+  game: RoundGameId;
   id: number;
   start: number;
   publicSeed: string;
@@ -105,7 +100,7 @@ export type PublicRound = {
   data: RoundData;
 };
 
-function roundData(game: GameId, roundId: number): RoundData {
+function roundData(game: RoundGameId, roundId: number): RoundData {
   switch (game) {
     case "snail": {
       const core = snailCore(roundId);
@@ -122,16 +117,11 @@ function roundData(game: GameId, roundId: number): RoundData {
     case "crash":
       return { game: "crash", maxMult: MAX_MULT, runMs: CRASH_TIMING.runMs };
     case "bingo":
-      return {
-        game: "bingo",
-        card: buildCard(publicSeedOf("bingo", roundId)),
-        drawCount: DRAW_COUNT,
-        drawMs: BINGO_TIMING.drawMs,
-      };
+      return { game: "bingo", drawCount: DRAW_COUNT, drawMs: BINGO_TIMING.drawMs };
   }
 }
 
-export function publicRound(game: GameId, roundId: number, now: number): PublicRound {
+export function publicRound(game: RoundGameId, roundId: number, now: number): PublicRound {
   const { betMs } = timingOf(game);
   const revealed = now - roundStart(game, roundId) >= betMs;
   return {
@@ -145,7 +135,7 @@ export function publicRound(game: GameId, roundId: number, now: number): PublicR
   };
 }
 
-export function currentRoundPayload(game: GameId, now: number) {
+export function currentRoundPayload(game: RoundGameId, now: number) {
   const id = roundIdAt(game, now);
   return {
     now,

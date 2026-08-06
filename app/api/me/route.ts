@@ -1,6 +1,6 @@
 import { errorResponse, requireUser } from "@/lib/api-auth";
 import { betsForRound, getUser, recentResults, settleUser } from "@/lib/db";
-import { isGameId } from "@/lib/games/types";
+import { isRoundGameId } from "@/lib/games/types";
 import { roundIdAt } from "@/lib/round";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export async function GET(req: Request) {
     const user = await requireUser(req);
 
     const raw = new URL(req.url).searchParams.get("game") ?? "snail";
-    const game = isGameId(raw) ? raw : "snail";
+    const game = isRoundGameId(raw) ? raw : "snail";
 
     const now = Date.now();
     const justSettled = await settleUser(user.uid, now);

@@ -11,6 +11,7 @@ const HREF: Record<GameId, string> = {
   oddeven: "/oddeven",
   crash: "/crash",
   bingo: "/bingo",
+  triple: "/triple",
 };
 
 /** 모든 게임이 공유하는 상단바와 탭. 잔액은 게임과 무관하게 하나다. */

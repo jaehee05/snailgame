@@ -1,6 +1,6 @@
 import { ApiError, errorResponse, requireUser } from "@/lib/api-auth";
 import { placeBet } from "@/lib/db";
-import { isGameId } from "@/lib/games/types";
+import { isRoundGameId } from "@/lib/games/types";
 import { roundIdAt } from "@/lib/round";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       autoTarget?: number;
     };
 
-    if (!isGameId(body.game)) throw new ApiError("알 수 없는 게임입니다.", 400);
+    if (!isRoundGameId(body.game)) throw new ApiError("알 수 없는 게임입니다.", 400);
     if (!body.kind) throw new ApiError("베팅 종류가 올바르지 않습니다.", 400);
 
     const now = Date.now();

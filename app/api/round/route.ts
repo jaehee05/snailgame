@@ -1,4 +1,4 @@
-import { isGameId } from "@/lib/games/types";
+import { isRoundGameId } from "@/lib/games/types";
 import { currentRoundPayload } from "@/lib/round";
 
 export const dynamic = "force-dynamic";
@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 /** 로그인 없이도 볼 수 있는 회차 정보 (공개 데이터 · 커밋 해시 · 공개된 시드) */
 export async function GET(req: Request) {
   const raw = new URL(req.url).searchParams.get("game") ?? "snail";
-  if (!isGameId(raw)) return Response.json({ error: "알 수 없는 게임입니다." }, { status: 400 });
+  if (!isRoundGameId(raw)) {
+    return Response.json({ error: "회차가 없는 게임입니다." }, { status: 400 });
+  }
 
   return Response.json(currentRoundPayload(raw, Date.now()), {
     headers: { "cache-control": "no-store" },

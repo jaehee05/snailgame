@@ -791,124 +791,205 @@ a {
 }
 
 /* ── 메가빙고 ───────────────────────────── */
-.bingo-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px;
-  gap: 16px;
-  align-items: start;
-  padding: 6px 0 2px;
-}
-
-@media (max-width: 620px) {
-  .bingo-stage { grid-template-columns: 1fr; }
-}
-
-.bingo-card {
-  display: grid;
-  gap: 6px;
-}
-
-.bingo-cell {
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line-soft);
-  background: var(--bg-2);
-  color: var(--dim);
-  font-size: 1.05rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  transition: background 0.25s, color 0.25s, border-color 0.25s, transform 0.25s;
-}
-
-.bingo-cell.is-hit {
-  background: linear-gradient(180deg, #2b3a52, #212c3f);
-  border-color: var(--line);
-  color: var(--text);
-  animation: cell-pop 0.3s ease-out;
-}
-
-@keyframes cell-pop {
-  0% { transform: scale(0.82); }
-  60% { transform: scale(1.06); }
-  100% { transform: scale(1); }
-}
-
-.bingo-cell.is-line {
-  background: linear-gradient(180deg, rgba(94, 232, 200, 0.28), rgba(94, 232, 200, 0.14));
-  border-color: rgba(94, 232, 200, 0.55);
-  color: #d8fff5;
-  box-shadow: 0 0 16px -4px rgba(94, 232, 200, 0.5);
-}
-
-.bingo-side { display: grid; gap: 12px; justify-items: center; text-align: center; }
-
-.bingo-count {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  padding: 14px 8px;
-  border-radius: var(--r);
-  background: var(--bg-2);
-  border: 1px solid var(--line-soft);
-}
-
-.bingo-count-num {
-  font-size: 2.6rem;
-  font-weight: 800;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.bingo-count small { color: var(--dim); font-size: 0.72rem; margin-top: 4px; }
-
-.bingo-balls {
+.bpick-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  justify-content: center;
-}
-
-.bingo-ball {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 0.83rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: var(--raised);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
   color: var(--muted);
 }
 
-.bingo-ball.is-new {
-  background: radial-gradient(circle at 34% 28%, #fff7dd, var(--accent-2) 70%);
-  color: #10141c;
-  animation: cell-pop 0.35s ease-out;
+.bpick-head strong { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+.bpick-actions { display: flex; gap: 6px; }
+
+.bpick-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
+.bpick-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 6px;
 }
 
-.bingo-picks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.bpick-col-head strong { font-size: 1rem; letter-spacing: 0.08em; color: var(--accent); }
+.bpick-col-head small { font-size: 0.68rem; color: var(--dim); font-variant-numeric: tabular-nums; }
 
-.bingo-pick {
-  display: grid;
-  gap: 2px;
-  padding: 11px 2px;
-  border-radius: var(--r-sm);
-  border: 1px solid var(--line);
+.bpick-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+
+.bnum {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  border: 1px solid var(--line-soft);
   background: var(--bg-2);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0;
 }
 
-.bingo-pick:hover:not(:disabled) { border-color: var(--dim); }
-.bingo-pick strong { font-size: 0.8rem; }
-.bingo-pick small { font-size: 0.64rem; color: var(--dim); }
+.bnum:hover:not(:disabled) { border-color: var(--dim); color: var(--text); }
 
-.bingo-pick.is-picked {
+.bnum.is-picked {
+  background: linear-gradient(180deg, #ffd77a, var(--accent-2));
   border-color: var(--accent-2);
-  background: rgba(242, 177, 52, 0.11);
+  color: #1c1203;
+  font-weight: 700;
 }
+
+@media (max-width: 560px) {
+  .bpick-nums { grid-template-columns: repeat(3, 1fr); }
+  .bnum { font-size: 0.68rem; }
+}
+
+/* 추첨 화면 */
+.bdraw { display: grid; gap: 14px; }
+
+.bdraw-ball { display: grid; justify-items: center; gap: 7px; padding: 4px 0 2px; }
+.bdraw-ball > small { color: var(--dim); font-size: 0.78rem; }
+
+.bball {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  background: radial-gradient(circle at 34% 28%, #fff, #f4f6fa 55%, #cbd3e0);
+  box-shadow: 0 0 0 7px rgba(242, 140, 52, 0.85), 0 14px 34px -12px rgba(0, 0, 0, 0.8);
+  animation: cell-pop 0.3s ease-out;
+}
+
+.bball-col {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #6b7688;
+  letter-spacing: 0.1em;
+}
+
+.bball-num {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #10141c;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+
+.bdraw-board { display: grid; gap: 3px; }
+
+.bdraw-row {
+  display: grid;
+  grid-template-columns: 22px repeat(15, 1fr);
+  gap: 3px;
+  align-items: center;
+}
+
+.bdraw-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+}
+
+.bdraw-num {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--bg-2);
+  color: var(--dim);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.bdraw-num.is-out {
+  background: radial-gradient(circle at 34% 28%, #ffe9a8, var(--accent-2) 75%);
+  color: #1c1203;
+  font-weight: 700;
+}
+
+/* 구입한 장 */
+.bcards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 9px;
+}
+
+.bcard {
+  padding: 7px;
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+}
+
+.bcard.is-win { border-color: rgba(255, 107, 107, 0.5); box-shadow: 0 0 14px -4px rgba(255, 107, 107, 0.5); }
+
+.bcard-head {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  margin-bottom: 3px;
+}
+
+.bcard-head span {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.bcard-grid { display: grid; gap: 2px; }
+
+.bcell {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.2s, color 0.2s;
+}
+
+.bcell.is-free { background: var(--raised); color: var(--muted); font-weight: 700; }
+
+.bcell.is-hit {
+  background: var(--accent-2);
+  color: #1c1203;
+  font-weight: 700;
+  animation: cell-pop 0.3s ease-out;
+}
+
+.bcell.is-win { background: var(--danger); color: #fff; }
+
+.bcard-rank {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+/* 당첨 구조 */
+.prize-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+.prize-list li {
+  display: grid;
+  grid-template-columns: 34px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  font-size: 0.8rem;
+}
+
+.prize-rank { color: var(--accent); font-weight: 700; font-size: 0.75rem; }
+.prize-cells { color: var(--dim); font-size: 0.72rem; }
+.prize-amount { color: var(--accent-2); font-variant-numeric: tabular-nums; font-weight: 600; }
 
 /* ── 관리자 ─────────────────────────────── */
 .table-wrap { overflow-x: auto; }
@@ -975,3 +1056,100 @@ a {
 
 .auth-card label { display: grid; gap: 5px; font-size: 0.83rem; }
 .auth-card label span { color: var(--dim); }
+
+/* ── 트리플럭 ───────────────────────────── */
+.tl-empty { display: grid; justify-items: center; gap: 12px; padding: 44px 16px; }
+.tl-empty-icon { font-size: 52px; }
+.tl-empty .primary { width: auto; padding: 12px 26px; }
+
+.tl-panels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 6px; }
+
+@media (max-width: 620px) { .tl-panels { grid-template-columns: 1fr; } }
+
+.tl-panel { display: grid; gap: 6px; }
+
+.tl-panel-label {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--dim);
+  letter-spacing: 0.02em;
+}
+
+.tl-scratch {
+  height: 118px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: linear-gradient(150deg, #4a5670, #333d52);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.tl-scratch.is-open {
+  background: var(--bg-2);
+  border-color: var(--line-soft);
+  cursor: default;
+}
+
+.tl-scratch.is-win {
+  border-color: var(--accent-2);
+  background: rgba(242, 177, 52, 0.12);
+  box-shadow: 0 0 20px -6px rgba(242, 177, 52, 0.7);
+}
+
+.tl-cover {
+  color: #cfd8e8;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.tl-symbols { display: flex; gap: 8px; align-items: center; animation: cell-pop 0.28s ease-out; }
+
+.tl-symbols span {
+  min-width: 46px;
+  padding: 8px 6px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tl-scratch.is-win .tl-symbols span {
+  background: linear-gradient(180deg, #ffd77a, var(--accent-2));
+  color: #1c1203;
+}
+
+.tl-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.tl-result {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--bg-2);
+}
+
+.tl-result.is-win {
+  background: rgba(242, 177, 52, 0.13);
+  border: 1px solid rgba(242, 177, 52, 0.35);
+}
+
+.tl-result strong { font-size: 1.05rem; }
+.tl-result.is-win span { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+
+.tl-again { width: auto; padding: 10px 22px; margin: 0; }
+
+.tl-seed { text-align: center; margin: 12px 0 0; color: var(--dim); }
+
+.prize-bonus { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 9px; }
+.prize-sub { opacity: 0.8; padding-left: 14px; }

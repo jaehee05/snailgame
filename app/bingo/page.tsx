@@ -3,24 +3,28 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { BetAmount } from "@/components/BetAmount";
 import { History } from "@/components/BetList";
+import { BingoCard } from "@/components/BingoCard";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
 import { RoundHeader } from "@/components/RoundHeader";
 import { api, formatCoins, useMe, useRound } from "@/lib/client";
-import { MIN_BET } from "@/lib/config";
 import {
+  autoPick,
   ballTimeOf,
-  BINGO_BETS,
-  BINGO_KINDS,
   BINGO_SETTLE_AT,
   BINGO_TIMING,
-  CARD_SIZE,
-  completedLines,
+  columnNumbers,
+  columnOf,
+  COLUMN_LABELS,
   drawBalls,
-  LINES,
-  type BingoKind,
+  isValidPicks,
+  MAX_TICKETS,
+  PATTERNS,
+  PICK_COUNT,
+  PICKS_PER_COLUMN,
+  PRIZES,
+  TICKET_PRICE,
 } from "@/lib/games/bingo";
 
 export default function BingoPage() {
@@ -29,8 +33,7 @@ export default function BingoPage() {
   const redirect = useCallback(() => router.replace("/login"), [router]);
   const { me, notice, setNotice, fatal, loadMe } = useMe("bingo", round?.id, redirect);
 
-  const [kind, setKind] = useState<BingoKind>("l2");
-  const [amount, setAmount] = useState(1_000);
+  const [picks, setPicks] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,24 +49,13 @@ export default function BingoPage() {
   const secretSeed = round?.secretSeed ?? null;
   const balls = useMemo(() => (secretSeed ? drawBalls(secretSeed) : []), [secretSeed]);
 
-  // 공은 시간에 따라 하나씩 나온다.
-  const shown = useMemo(() => {
-    if (balls.length === 0) return [];
-    return balls.filter((_, i) => elapsed >= ballTimeOf(i));
-  }, [balls, elapsed]);
-
-  const cardData = round?.data.game === "bingo" ? round.data.card : undefined;
-  const card = useMemo(() => cardData ?? [], [cardData]);
-  const drawnSet = useMemo(() => new Set(shown), [shown]);
-  const lines = useMemo(
-    () => (card.length ? completedLines(card, drawnSet) : []),
-    [card, drawnSet]
+  // 공은 하나씩 순서대로 나온다.
+  const shown = useMemo(
+    () => balls.filter((_, i) => elapsed >= ballTimeOf(i)),
+    [balls, elapsed]
   );
-  const litCells = useMemo(() => {
-    const set = new Set<number>();
-    for (const li of lines) for (const cell of LINES[li]) set.add(cell);
-    return set;
-  }, [lines]);
+  const drawn = useMemo(() => new Set(shown), [shown]);
+  const latest = shown.length > 0 ? shown[shown.length - 1] : null;
 
   const remaining = Math.max(
     0,
@@ -74,20 +66,52 @@ export default function BingoPage() {
         : BINGO_SETTLE_AT - elapsed
   );
 
-  async function submit() {
-    if (busy || !round) return;
-    if (amount < MIN_BET) return setError(`최소 ${formatCoins(MIN_BET)} 코인부터 걸 수 있습니다.`);
-    if (me && amount > me.user.balance) return setError("잔액이 부족합니다.");
+  const countByColumn = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0];
+    for (const n of picks) counts[columnOf(n)]++;
+    return counts;
+  }, [picks]);
+
+  const complete = isValidPicks(picks);
+  const tickets = me?.bets ?? [];
+
+  function toggle(n: number) {
+    if (!open) return;
+    setError(null);
+    setPicks((prev) => {
+      if (prev.includes(n)) return prev.filter((p) => p !== n);
+      const col = columnOf(n);
+      const used = prev.filter((p) => columnOf(p) === col).length;
+      if (used >= PICKS_PER_COLUMN[col]) return prev;
+      return [...prev, n].sort((a, b) => a - b);
+    });
+  }
+
+  async function buy(count: number, auto: boolean) {
+    if (busy || !round || !me) return;
+    if (me.user.balance < TICKET_PRICE * count) return setError("잔액이 부족합니다.");
+    if (tickets.length + count > MAX_TICKETS) {
+      return setError(`한 회차에 최대 ${MAX_TICKETS}장까지 살 수 있습니다.`);
+    }
     setBusy(true);
     setError(null);
     try {
-      await api("/api/bet", {
-        method: "POST",
-        body: JSON.stringify({ game: "bingo", roundId: round.id, kind, picks: [], amount }),
-      });
+      for (let i = 0; i < count; i++) {
+        await api("/api/bet", {
+          method: "POST",
+          body: JSON.stringify({
+            game: "bingo",
+            roundId: round.id,
+            kind: "ticket",
+            picks: auto || !complete ? autoPick() : picks,
+            amount: TICKET_PRICE,
+          }),
+        });
+      }
+      if (!auto) setPicks([]);
       await loadMe();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "베팅에 실패했습니다.");
+      setError(err instanceof Error ? err.message : "구입에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -98,8 +122,6 @@ export default function BingoPage() {
     return <main className="center-screen">{roundError ?? "불러오는 중…"}</main>;
   }
 
-  const myBets = me.bets;
-
   return (
     <GameShell me={me} notice={notice} onDismissNotice={() => setNotice(null)}>
       <main className="layout">
@@ -107,7 +129,7 @@ export default function BingoPage() {
           <RoundHeader
             roundId={round.id}
             phase={open ? "betting" : done ? "result" : "racing"}
-            label={open ? "베팅 접수 중" : done ? "결과 발표" : "추첨 중"}
+            label={open ? "구입 가능" : done ? "추첨 완료" : "추첨 중"}
             remaining={remaining}
             progress={
               open
@@ -116,132 +138,156 @@ export default function BingoPage() {
             }
           />
 
-          <div className="bingo-stage">
-            <div
-              className="bingo-card"
-              style={{ gridTemplateColumns: `repeat(${CARD_SIZE}, 1fr)` }}
-            >
-              {card.map((n, cell) => {
-                const hit = drawnSet.has(n);
-                return (
-                  <div
-                    key={cell}
-                    className={`bingo-cell${hit ? " is-hit" : ""}${
-                      litCells.has(cell) ? " is-line" : ""
-                    }`}
-                  >
-                    {n}
-                  </div>
-                );
-              })}
-            </div>
+          {open ? (
+            <>
+              <div className="bpick-head">
+                <span>
+                  선택 <strong>{picks.length}</strong> / {PICK_COUNT}
+                </span>
+                <div className="bpick-actions">
+                  <button type="button" className="chip" onClick={() => setPicks(autoPick())}>
+                    자동선택
+                  </button>
+                  <button type="button" className="chip chip-ghost" onClick={() => setPicks([])}>
+                    비우기
+                  </button>
+                </div>
+              </div>
 
-            <div className="bingo-side">
-              <div className="bingo-count">
-                <span className="bingo-count-num">{lines.length}</span>
-                <small>완성된 줄</small>
+              <div className="bpick-board">
+                {COLUMN_LABELS.map((label, col) => (
+                  <div key={label} className="bpick-col">
+                    <div className="bpick-col-head">
+                      <strong>{label}</strong>
+                      <small>
+                        {countByColumn[col]}/{PICKS_PER_COLUMN[col]}
+                      </small>
+                    </div>
+                    <div className="bpick-nums">
+                      {columnNumbers(col).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          className={`bnum${picks.includes(n) ? " is-picked" : ""}`}
+                          onClick={() => toggle(n)}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="bingo-balls">
-                {shown
-                  .slice()
-                  .reverse()
-                  .slice(0, 8)
-                  .map((n, i) => (
-                    <span key={n} className={`bingo-ball${i === 0 ? " is-new" : ""}`}>
-                      {n}
-                    </span>
-                  ))}
+            </>
+          ) : (
+            <div className="bdraw">
+              <div className="bdraw-ball">
+                <small>{shown.length}번째 추첨</small>
+                <div className="bball">
+                  {latest !== null && (
+                    <>
+                      <span className="bball-col">{COLUMN_LABELS[columnOf(latest)]}</span>
+                      <span className="bball-num">{latest}</span>
+                    </>
+                  )}
+                </div>
+                <small className="muted">
+                  {shown.length} / {round.data.drawCount}
+                </small>
               </div>
-              <p className="muted small">
-                {shown.length} / {round.data.drawCount} 개
-              </p>
+
+              <div className="bdraw-board">
+                {COLUMN_LABELS.map((label, col) => (
+                  <div key={label} className="bdraw-row">
+                    <span className="bdraw-label">{label}</span>
+                    {columnNumbers(col).map((n) => (
+                      <span key={n} className={`bdraw-num${drawn.has(n) ? " is-out" : ""}`}>
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </section>
 
         <aside className="side">
           <div className={`panel${open ? "" : " panel-locked"}`}>
             <div className="panel-title">
-              <h2>베팅</h2>
-              {!open && <span className="badge badge-muted">마감</span>}
+              <h2>구입</h2>
+              <span className="badge">{formatCoins(TICKET_PRICE)} 코인 / 장</span>
             </div>
 
-            <div className="bingo-picks">
-              {BINGO_KINDS.map((k) => (
+            <p className="kind-desc">
+              B·I·G·O 각 5개, N 4개 해서 24개를 고릅니다. 가운데는 FREE 입니다.
+              고르기 번거로우면 자동선택으로 사면 됩니다.
+            </p>
+
+            <button
+              type="button"
+              className="primary"
+              disabled={!open || busy || !complete}
+              onClick={() => buy(1, false)}
+            >
+              {busy ? "구입 중…" : complete ? "이 번호로 구입" : `${PICK_COUNT - picks.length}개 더 고르세요`}
+            </button>
+
+            <div className="amount-row" style={{ marginTop: 8 }}>
+              {[1, 3, 5, 10].map((n) => (
                 <button
-                  key={k}
+                  key={n}
                   type="button"
-                  disabled={!open}
-                  className={`bingo-pick${k === kind ? " is-picked" : ""}`}
-                  onClick={() => {
-                    setKind(k);
-                    setError(null);
-                  }}
+                  className="chip"
+                  disabled={!open || busy}
+                  onClick={() => buy(n, true)}
                 >
-                  <strong>{BINGO_BETS[k].label}</strong>
-                  <small>{BINGO_BETS[k].odds.toFixed(2)}배</small>
+                  {n}장 자동
                 </button>
               ))}
             </div>
 
-            <p className="kind-desc">{BINGO_BETS[kind].desc}</p>
-
-            <BetAmount
-              amount={amount}
-              setAmount={setAmount}
-              balance={me.user.balance}
-              disabled={!open}
-              odds={BINGO_BETS[kind].odds}
-            />
-
             {error && <p className="error">{error}</p>}
-
-            <button type="button" className="primary" disabled={!open || busy} onClick={submit}>
-              {busy ? "접수 중…" : "베팅하기"}
-            </button>
           </div>
 
           <div className="panel">
             <div className="panel-title">
-              <h2>이번 회차 내 베팅</h2>
-              {myBets.length > 0 && (
-                <span className="badge">
-                  {formatCoins(myBets.reduce((s, b) => s + b.amount, 0))} 코인
-                </span>
-              )}
+              <h2>당첨 구조</h2>
             </div>
-            {myBets.length === 0 ? (
-              <p className="muted small">아직 베팅이 없습니다.</p>
-            ) : (
-              <ul className="bet-list">
-                {myBets.map((b) => {
-                  const meta = BINGO_BETS[b.kind as BingoKind];
-                  const hit = done
-                    ? b.kind === "l4plus"
-                      ? lines.length >= 4
-                      : lines.length === Number(b.kind.slice(1))
-                    : null;
-                  return (
-                    <li key={b.id} className={hit === null ? "" : hit ? "hit" : "miss"}>
-                      <span className="bet-kind">빙고</span>
-                      <span className="bet-desc">{meta?.label ?? b.kind}</span>
-                      <span className="bet-amount">
-                        {formatCoins(b.amount)} × {b.odds.toFixed(2)}
-                      </span>
-                      {hit !== null && (
-                        <span className="bet-result">
-                          {hit ? `+${formatCoins(Math.floor(b.amount * b.odds))}` : "낙첨"}
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <ul className="prize-list">
+              {PATTERNS.map((p) => (
+                <li key={p.rank}>
+                  <span className="prize-rank">{p.rank}등</span>
+                  <span className="prize-name">{p.name}</span>
+                  <span className="prize-cells">{p.cells.length}칸</span>
+                  <span className="prize-amount">{formatCoins(PRIZES[p.rank])}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         </aside>
 
         <section className="bottom">
+          <div className="panel">
+            <div className="panel-title">
+              <h2>구입 내역</h2>
+              {tickets.length > 0 && (
+                <span className="badge">
+                  {tickets.length}장 · {formatCoins(tickets.length * TICKET_PRICE)} 코인
+                </span>
+              )}
+            </div>
+            {tickets.length === 0 ? (
+              <p className="muted small">이번 회차에 구입한 장이 없습니다.</p>
+            ) : (
+              <div className="bcards">
+                {tickets.map((t) => (
+                  <BingoCard key={t.id} picks={t.picks} drawn={drawn} compact />
+                ))}
+              </div>
+            )}
+          </div>
+
           <History results={me.results} />
           {prev && <Fairness round={round} prev={prev} />}
         </section>
