@@ -1,9 +1,12 @@
 "use client";
 
-import { BET_META, describeBet, type PlacedBet } from "@/lib/bets";
-import { formatCoins, type MeState } from "@/lib/client";
+import { BET_META, describeBet, isHit, type BetKind, type PlacedBet } from "@/lib/bets";
+import { formatCoins, formatMult, type RoundResult } from "@/lib/client";
+import { ODDEVEN_BETS, type OddEvenKind } from "@/lib/games/oddeven";
+import { GAME_ICON, type GameId } from "@/lib/games/types";
 import type { Racer } from "@/lib/race";
 
+/** 이번 회차에 내가 건 것 (달팽이) */
 export function MyBets({
   bets,
   racers,
@@ -27,11 +30,12 @@ export function MyBets({
       ) : (
         <ul className="bet-list">
           {bets.map((bet) => {
-            const hit = order ? isWinning(bet, order) : null;
+            const sel = { kind: bet.kind as BetKind, picks: bet.picks };
+            const hit = order ? isHit(sel, order) : null;
             return (
               <li key={bet.id} className={hit === null ? "" : hit ? "hit" : "miss"}>
-                <span className="bet-kind">{BET_META[bet.kind].label}</span>
-                <span className="bet-desc">{describeBet(bet, names)}</span>
+                <span className="bet-kind">{BET_META[sel.kind]?.label ?? bet.kind}</span>
+                <span className="bet-desc">{describeBet(sel, names)}</span>
                 <span className="bet-amount">
                   {formatCoins(bet.amount)} × {bet.odds.toFixed(2)}
                 </span>
@@ -49,25 +53,78 @@ export function MyBets({
   );
 }
 
-function isWinning(bet: PlacedBet, order: number[]): boolean {
-  const [a, b, c] = bet.picks;
-  switch (bet.kind) {
-    case "win":
-      return order[0] === a;
-    case "place":
-      return order.indexOf(a) < 2;
-    case "quinella":
-      return order.slice(0, 2).includes(a) && order.slice(0, 2).includes(b);
-    case "exacta":
-      return order[0] === a && order[1] === b;
-    case "trifecta":
-      return order[0] === a && order[1] === b && order[2] === c;
-    default:
-      return false;
+/** 이번 회차에 내가 건 것 (홀짝) */
+export function MyOddEvenBets({ bets, drawn }: { bets: PlacedBet[]; drawn: number | null }) {
+  const total = bets.reduce((sum, b) => sum + b.amount, 0);
+  return (
+    <div className="panel">
+      <div className="panel-title">
+        <h2>이번 회차 내 베팅</h2>
+        {bets.length > 0 && <span className="badge">{formatCoins(total)} 코인</span>}
+      </div>
+      {bets.length === 0 ? (
+        <p className="muted small">아직 베팅이 없습니다.</p>
+      ) : (
+        <ul className="bet-list">
+          {bets.map((bet) => {
+            const meta = ODDEVEN_BETS[bet.kind as OddEvenKind];
+            const hit =
+              drawn === null
+                ? null
+                : hitOddEven(bet.kind as OddEvenKind, drawn % 2 === 1, drawn > 50);
+            return (
+              <li key={bet.id} className={hit === null ? "" : hit ? "hit" : "miss"}>
+                <span className="bet-kind">{meta?.group ?? ""}</span>
+                <span className="bet-desc">{meta?.label ?? bet.kind}</span>
+                <span className="bet-amount">
+                  {formatCoins(bet.amount)} × {bet.odds.toFixed(2)}
+                </span>
+                {hit !== null && (
+                  <span className="bet-result">
+                    {hit ? `+${formatCoins(Math.floor(bet.amount * bet.odds))}` : "낙첨"}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function hitOddEven(kind: OddEvenKind, odd: boolean, high: boolean): boolean {
+  switch (kind) {
+    case "odd":
+      return odd;
+    case "even":
+      return !odd;
+    case "high":
+      return high;
+    case "low":
+      return !high;
+    case "oh":
+      return odd && high;
+    case "ol":
+      return odd && !high;
+    case "eh":
+      return !odd && high;
+    case "el":
+      return !odd && !high;
   }
 }
 
-export function History({ results }: { results: MeState["results"] }) {
+function summaryText(game: GameId, summary: number[]): string {
+  if (game === "snail") return summary.map((lane) => lane + 1).join(" → ");
+  if (game === "oddeven") {
+    const n = summary[0];
+    return `${n} (${n % 2 === 1 ? "홀" : "짝"}·${n > 50 ? "대" : "소"})`;
+  }
+  return formatMult(summary[0]);
+}
+
+/** 세 게임의 결과가 시간순으로 섞여서 쌓인다. */
+export function History({ results }: { results: RoundResult[] }) {
   return (
     <div className="panel">
       <div className="panel-title">
@@ -80,11 +137,9 @@ export function History({ results }: { results: MeState["results"] }) {
           {results.map((r) => {
             const net = r.returned - r.staked;
             return (
-              <li key={r.roundId}>
-                <span className="mono muted">#{r.roundId}</span>
-                <span className="history-order">
-                  {r.order.map((lane) => lane + 1).join(" → ")}
-                </span>
+              <li key={`${r.game}_${r.roundId}`}>
+                <span title={r.game}>{GAME_ICON[r.game]}</span>
+                <span className="history-order">{summaryText(r.game, r.summary)}</span>
                 <span className={net >= 0 ? "net-up" : "net-down"}>
                   {net >= 0 ? "+" : ""}
                   {formatCoins(net)}

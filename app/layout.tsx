@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "달팽이 레이싱",
-  description: "가상 코인으로 즐기는 친구들끼리의 달팽이 경주",
+  title: "미니게임",
+  description: "가상 코인으로 즐기는 달팽이 레이싱 · 홀짝 · 그래프",
 };
 
 export const viewport: Viewport = {

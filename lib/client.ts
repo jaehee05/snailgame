@@ -3,23 +3,40 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { OddsTable, PlacedBet } from "./bets";
+import type { GameId } from "./games/types";
 import type { Racer } from "./race";
 
+export type RoundData =
+  | { game: "snail"; racers: Racer[]; odds: OddsTable; tickMs: number; raceMs: number }
+  | { game: "oddeven"; drawMs: number }
+  | { game: "crash"; maxMult: number; runMs: number };
+
 export type PublicRound = {
+  game: GameId;
   id: number;
   start: number;
   publicSeed: string;
   commit: string;
   secretSeed: string | null;
-  odds: OddsTable;
-  racers: Racer[];
+  data: RoundData;
 };
 
 export type RoundPayload = {
   now: number;
-  timing: { roundMs: number; betMs: number; raceMs: number };
+  game: GameId;
+  timing: { roundMs: number; betMs: number };
   round: PublicRound;
   prev: PublicRound;
+};
+
+export type RoundResult = {
+  game: GameId;
+  roundId: number;
+  summary: number[];
+  staked: number;
+  returned: number;
+  bets: PlacedBet[];
+  at: number;
 };
 
 export type MeState = {
@@ -31,17 +48,11 @@ export type MeState = {
     staked: number;
     returned: number;
   };
+  game: GameId;
   roundId: number;
   bets: PlacedBet[];
-  results: {
-    roundId: number;
-    order: number[];
-    staked: number;
-    returned: number;
-    bets: PlacedBet[];
-    at: number;
-  }[];
-  justSettled: MeState["results"];
+  results: RoundResult[];
+  justSettled: RoundResult[];
 };
 
 export class RequestError extends Error {
@@ -69,9 +80,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 /**
  * 회차 정보를 주기적으로 받아오고, 서버 시계에 맞춘 현재 시각을 돌려준다.
- * 모든 참가자가 같은 순간에 같은 경주를 보게 만드는 부분이다.
+ * 모든 참가자가 같은 순간에 같은 결과를 보게 만드는 부분이다.
  */
-export function useRound() {
+export function useRound(game: GameId) {
   const [payload, setPayload] = useState<RoundPayload | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const offset = useRef(0);
@@ -79,21 +90,21 @@ export function useRound() {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api<RoundPayload>("/api/round");
+      const data = await api<RoundPayload>(`/api/round?game=${game}`);
       offset.current = data.now - Date.now();
       setPayload(data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "연결이 불안정합니다.");
     }
-  }, []);
+  }, [game]);
 
   useEffect(() => {
     // 서버 응답을 기다렸다가 state 를 채우는 구독형 effect 다.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
     refresh();
     const poll = setInterval(refresh, 3000);
-    const tick = setInterval(() => setNow(Date.now() + offset.current), 80);
+    const tick = setInterval(() => setNow(Date.now() + offset.current), 60);
     return () => {
       clearInterval(poll);
       clearInterval(tick);
@@ -106,12 +117,48 @@ export function useRound() {
     payload,
     round,
     prev: payload?.prev ?? null,
+    timing: payload?.timing ?? null,
     now,
-    // 회차 시작으로부터 지난 시간. 단계 판정은 경주 길이를 아는 화면 쪽에서 한다.
     elapsed: round ? now - round.start : 0,
     error,
     refresh,
   };
+}
+
+/** 잔액·내 베팅·정산 결과. 회차가 바뀔 때마다 다시 받아온다. */
+export function useMe(game: GameId, roundId: number | undefined, onRedirect: () => void) {
+  const [me, setMe] = useState<MeState | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [fatal, setFatal] = useState<string | null>(null);
+  const loadedOnce = useRef(false);
+
+  const loadMe = useCallback(async () => {
+    try {
+      const data = await api<MeState>(`/api/me?game=${game}`);
+      loadedOnce.current = true;
+      setMe(data);
+      setFatal(null);
+      if (data.justSettled.length > 0) {
+        const net = data.justSettled.reduce((s, r) => s + r.returned - r.staked, 0);
+        setNotice(`정산: ${net >= 0 ? "+" : ""}${formatCoins(net)} 코인`);
+      }
+    } catch (err) {
+      if (err instanceof RequestError && err.status === 401) {
+        onRedirect();
+        return;
+      }
+      const message = err instanceof Error ? err.message : "상태를 불러오지 못했습니다.";
+      if (loadedOnce.current) setNotice(message);
+      else setFatal(message);
+    }
+  }, [game, onRedirect]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
+    loadMe();
+  }, [roundId, loadMe]);
+
+  return { me, setMe, notice, setNotice, fatal, loadMe };
 }
 
 export function formatCoins(n: number): string {
@@ -123,4 +170,8 @@ export function formatClock(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function formatMult(m: number): string {
+  return `${m.toFixed(2)}배`;
 }

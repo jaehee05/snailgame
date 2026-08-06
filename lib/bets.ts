@@ -1,4 +1,5 @@
 import { MC_RUNS, PAYOUT_RATE } from "./config";
+import type { GameId } from "./games/types";
 import { Racer, simulate } from "./race";
 
 export type BetKind = "win" | "place" | "quinella" | "exacta" | "trifecta";
@@ -103,18 +104,24 @@ export function oddsFor(table: OddsTable, sel: BetSelection): number {
 
 export type PlacedBet = {
   id: string;
+  game: GameId;
   roundId: number;
-  kind: BetKind;
+  /** 달팽이는 BetKind, 홀짝은 OddEvenKind, 그래프는 "ride" */
+  kind: string;
   picks: number[];
   amount: number;
   odds: number;
+  /** 그래프 전용: 미리 걸어둔 자동 인출 배수 */
+  autoTarget?: number;
+  /** 그래프 전용: 실제로 인출한 배수 */
+  cashoutMult?: number;
   /** 정산 후에만 채워진다 */
   hit?: boolean;
   payout?: number;
 };
 
 export function payoutOf(bet: PlacedBet, order: number[]): { hit: boolean; payout: number } {
-  const hit = isHit({ kind: bet.kind, picks: bet.picks }, order);
+  const hit = isHit({ kind: bet.kind as BetKind, picks: bet.picks }, order);
   return { hit, payout: hit ? Math.floor(bet.amount * bet.odds) : 0 };
 }
 

@@ -3,10 +3,28 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { hashPassword, newUid, verifyPassword } from "./auth-session";
-import { oddsFor, payoutOf, type BetKind, type PlacedBet } from "./bets";
-import { MAX_BET, MIN_BET, START_BALANCE } from "./config";
+import { isValidSelection, oddsFor, payoutOf, type BetKind, type PlacedBet } from "./bets";
+import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
-import { isBettingOpen, isRoundFinished, roundCore, roundOutcome } from "./round";
+import {
+  CRASH_TIMING,
+  crashSettle,
+  isValidAutoTarget,
+  multAt,
+  type CrashBetExtra,
+} from "./games/crash";
+import { isOddEvenSelection, oddEvenHit, oddEvenOdds, oddEvenOutcome } from "./games/oddeven";
+import type { GameId, Selection } from "./games/types";
+import {
+  crashPointOfRound,
+  isBettingOpen,
+  isRoundFinished,
+  roundStart,
+  settleAtOf,
+  snailCore,
+  snailOutcome,
+} from "./round";
+import { secretSeedOf } from "./seeds";
 
 export type UserDoc = {
   uid: string;
@@ -39,8 +57,10 @@ export function publicUser(user: UserDoc): PublicUser {
 }
 
 export type RoundResult = {
+  game: GameId;
   roundId: number;
-  order: number[];
+  /** 게임별 결과 요약 (달팽이는 순위, 홀짝은 숫자, 그래프는 터진 배수) */
+  summary: number[];
   staked: number;
   returned: number;
   bets: PlacedBet[];
@@ -144,11 +164,16 @@ export async function listUsers(): Promise<PublicUser[]> {
 
 /* ── 베팅 ─────────────────────────────────────────── */
 
-export async function betsForRound(uid: string, roundId: number): Promise<PlacedBet[]> {
+export async function betsForRound(
+  uid: string,
+  game: GameId,
+  roundId: number
+): Promise<PlacedBet[]> {
   const snap = await adminDb()
     .collection("users")
     .doc(uid)
     .collection("bets")
+    .where("game", "==", game)
     .where("roundId", "==", roundId)
     .get();
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlacedBet, "id">) }));
@@ -159,35 +184,71 @@ export async function recentResults(uid: string, limit = 20): Promise<RoundResul
     .collection("users")
     .doc(uid)
     .collection("results")
-    .orderBy("roundId", "desc")
+    .orderBy("at", "desc")
     .limit(limit)
     .get();
   return snap.docs.map((d) => d.data() as RoundResult);
 }
 
+/** 게임별로 베팅이 성립하는지 확인하고 서버가 배당을 다시 계산한다. */
+function validateAndPrice(
+  game: GameId,
+  roundId: number,
+  sel: Selection
+): { odds: number } {
+  switch (game) {
+    case "snail": {
+      if (!isValidSelection({ kind: sel.kind as BetKind, picks: sel.picks }, FIELD)) {
+        throw new Error("선택한 달팽이 조합이 올바르지 않습니다.");
+      }
+      return { odds: oddsFor(snailCore(roundId).odds, { kind: sel.kind as BetKind, picks: sel.picks }) };
+    }
+    case "oddeven": {
+      if (!isOddEvenSelection(sel)) throw new Error("베팅 종류가 올바르지 않습니다.");
+      return { odds: oddEvenOdds(sel) };
+    }
+    case "crash": {
+      if (sel.kind !== "ride") throw new Error("베팅 종류가 올바르지 않습니다.");
+      return { odds: 1 }; // 실제 배당은 인출 시점에 정해진다
+    }
+  }
+}
+
 export async function placeBet(
   uid: string,
+  game: GameId,
   roundId: number,
-  kind: BetKind,
-  picks: number[],
+  sel: Selection,
   amount: number,
+  autoTarget: number | undefined,
   now: number
 ): Promise<{ bet: PlacedBet; balance: number }> {
-  if (!isBettingOpen(roundId, now)) throw new Error("이번 회차 베팅이 마감되었습니다.");
+  if (!isBettingOpen(game, roundId, now)) throw new Error("이번 회차 베팅이 마감되었습니다.");
   if (!Number.isInteger(amount) || amount < MIN_BET || amount > MAX_BET) {
     throw new Error(
       `베팅 금액은 ${MIN_BET.toLocaleString()} ~ ${MAX_BET.toLocaleString()} 코인 사이여야 합니다.`
     );
   }
+  if (game === "crash" && !isValidAutoTarget(autoTarget)) {
+    throw new Error("자동 인출 배수가 올바르지 않습니다.");
+  }
 
-  // 배당은 클라이언트 값을 믿지 않고 서버가 다시 계산한다.
-  const odds = oddsFor(roundCore(roundId).odds, { kind, picks });
+  const { odds } = validateAndPrice(game, roundId, sel);
 
   const db = adminDb();
   const userRef = db.collection("users").doc(uid);
   const betRef = userRef.collection("bets").doc();
 
-  const bet: PlacedBet = { id: betRef.id, roundId, kind, picks, amount, odds };
+  const bet: PlacedBet = {
+    id: betRef.id,
+    game,
+    roundId,
+    kind: sel.kind,
+    picks: sel.picks,
+    amount,
+    odds,
+    ...(game === "crash" && autoTarget ? { autoTarget } : {}),
+  };
 
   const balance = await db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
@@ -195,9 +256,15 @@ export async function placeBet(
     const user = snap.data() as UserDoc;
     if (user.balance < amount) throw new Error("잔액이 부족합니다.");
 
-    const existing = await tx.get(userRef.collection("bets").where("roundId", "==", roundId));
+    const existing = await tx.get(
+      userRef.collection("bets").where("roundId", "==", roundId).where("game", "==", game)
+    );
     if (existing.size >= MAX_BETS_PER_ROUND) {
       throw new Error(`한 회차에 최대 ${MAX_BETS_PER_ROUND}건까지 베팅할 수 있습니다.`);
+    }
+    // 그래프는 회차당 한 판만 태울 수 있게 한다 (인출 판정이 단순해진다)
+    if (game === "crash" && existing.size >= 1) {
+      throw new Error("그래프는 회차당 한 번만 베팅할 수 있습니다.");
     }
 
     tx.set(betRef, { ...bet, settled: false, createdAt: now });
@@ -212,7 +279,85 @@ export async function placeBet(
 }
 
 /**
- * 아직 정산되지 않은 베팅 중 경주가 끝난 회차를 찾아 정산한다.
+ * 그래프 인출. 지금 몇 배인지는 서버 시계로만 판단한다.
+ * 이미 터진 뒤라면 거절한다.
+ */
+export async function cashOut(
+  uid: string,
+  roundId: number,
+  now: number
+): Promise<{ mult: number; payout: number }> {
+  const elapsed = now - roundStart("crash", roundId);
+  if (elapsed < CRASH_TIMING.betMs) throw new Error("아직 출발 전입니다.");
+
+  const crashPoint = crashPointOfRound(roundId);
+  const mult = Math.floor(multAt(elapsed - CRASH_TIMING.betMs) * 100) / 100;
+  if (mult > crashPoint) throw new Error("이미 터졌습니다.");
+
+  const db = adminDb();
+  const userRef = db.collection("users").doc(uid);
+
+  return db.runTransaction(async (tx) => {
+    const found = await tx.get(
+      userRef.collection("bets").where("roundId", "==", roundId).where("game", "==", "crash")
+    );
+    if (found.empty) throw new Error("이번 회차에 베팅한 내역이 없습니다.");
+    const doc = found.docs[0];
+    const bet = doc.data() as PlacedBet & { settled: boolean };
+    if (bet.cashoutMult) throw new Error("이미 인출했습니다.");
+    if (bet.settled) throw new Error("이미 정산된 회차입니다.");
+
+    tx.update(doc.ref, { cashoutMult: mult });
+    return { mult, payout: Math.floor(bet.amount * mult) };
+  });
+}
+
+/** 회차 결과를 게임별로 계산해 베팅 하나하나를 정산한다. */
+type GameOutcome =
+  | { game: "snail"; order: number[] }
+  | { game: "oddeven"; draw: ReturnType<typeof oddEvenOutcome> }
+  | { game: "crash"; crashPoint: number };
+
+function outcomeOf(game: GameId, roundId: number): GameOutcome {
+  switch (game) {
+    case "snail":
+      return { game: "snail", order: snailOutcome(roundId).order };
+    case "oddeven":
+      return { game: "oddeven", draw: oddEvenOutcome(secretSeedOf("oddeven", roundId)) };
+    case "crash":
+      return { game: "crash", crashPoint: crashPointOfRound(roundId) };
+  }
+}
+
+function settleOne(bet: PlacedBet, outcome: GameOutcome): { hit: boolean; payout: number } {
+  switch (outcome.game) {
+    case "snail":
+      return payoutOf(bet, outcome.order);
+    case "oddeven": {
+      const hit = oddEvenHit({ kind: bet.kind, picks: bet.picks }, outcome.draw);
+      return { hit, payout: hit ? Math.floor(bet.amount * bet.odds) : 0 };
+    }
+    case "crash": {
+      const extra: CrashBetExtra = { autoTarget: bet.autoTarget, cashoutMult: bet.cashoutMult };
+      const { hit, payout } = crashSettle(bet.amount, extra, outcome.crashPoint);
+      return { hit, payout };
+    }
+  }
+}
+
+function summaryOf(outcome: GameOutcome): number[] {
+  switch (outcome.game) {
+    case "snail":
+      return outcome.order;
+    case "oddeven":
+      return [outcome.draw.number];
+    case "crash":
+      return [outcome.crashPoint];
+  }
+}
+
+/**
+ * 아직 정산되지 않은 베팅 중 결과가 확정된 회차를 찾아 정산한다.
  * 별도 크론 없이, 사용자가 접속할 때마다 밀린 회차를 따라잡는 방식이다.
  */
 export async function settleUser(uid: string, now: number): Promise<RoundResult[]> {
@@ -221,19 +366,27 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   const pending = await userRef.collection("bets").where("settled", "==", false).get();
   if (pending.empty) return [];
 
-  const byRound = new Map<number, typeof pending.docs>();
+  // (게임, 회차) 단위로 묶는다
+  const groups = new Map<string, { game: GameId; roundId: number; docs: typeof pending.docs }>();
   for (const doc of pending.docs) {
-    const { roundId } = doc.data() as PlacedBet;
-    if (!isRoundFinished(roundId, now)) continue;
-    const list = byRound.get(roundId) ?? [];
-    list.push(doc);
-    byRound.set(roundId, list);
+    const data = doc.data() as PlacedBet;
+    // 게임이 하나뿐이던 시절의 베팅에는 game 필드가 없다.
+    const game: GameId = data.game ?? "snail";
+    const { roundId } = data;
+    if (!isRoundFinished(game, roundId, now)) continue;
+    const key = `${game}:${roundId}`;
+    const group = groups.get(key) ?? { game, roundId, docs: [] };
+    group.docs.push(doc);
+    groups.set(key, group);
   }
 
   const results: RoundResult[] = [];
+  const ordered = [...groups.values()].sort(
+    (a, b) => roundStart(a.game, a.roundId) - roundStart(b.game, b.roundId)
+  );
 
-  for (const [roundId, docs] of [...byRound.entries()].sort((a, b) => a[0] - b[0])) {
-    const { order } = roundOutcome(roundId);
+  for (const { game, roundId, docs } of ordered) {
+    const outcome = outcomeOf(game, roundId);
 
     const result = await db.runTransaction(async (tx) => {
       const fresh = await Promise.all(docs.map((d) => tx.get(d.ref)));
@@ -245,7 +398,7 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
         if (!snap.exists) continue;
         const data = snap.data() as PlacedBet & { settled: boolean };
         if (data.settled) continue;
-        const { hit, payout } = payoutOf(data, order);
+        const { hit, payout } = settleOne(data, outcome);
         staked += data.amount;
         returned += payout;
         settledBets.push({ ...data, hit, payout });
@@ -255,14 +408,15 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
       if (settledBets.length === 0) return null;
 
       const roundResult: RoundResult = {
+        game,
         roundId,
-        order,
+        summary: summaryOf(outcome),
         staked,
         returned,
         bets: settledBets,
-        at: now,
+        at: roundStart(game, roundId) + settleAtOf(game, roundId),
       };
-      tx.set(userRef.collection("results").doc(String(roundId)), roundResult);
+      tx.set(userRef.collection("results").doc(`${game}_${roundId}`), roundResult);
       if (returned > 0) {
         tx.update(userRef, {
           balance: FieldValue.increment(returned),
@@ -277,6 +431,7 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
 
   return results;
 }
+
 
 /* ── 관리자 ───────────────────────────────────────── */
 

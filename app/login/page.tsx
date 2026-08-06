@@ -34,9 +34,9 @@ export default function LoginPage() {
     <main className="center-screen">
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-brand">
-          <span>🐌</span>
-          <h1>달팽이 레이싱</h1>
-          <p className="muted small">가상 코인으로 즐기는 친구들끼리의 달팽이 경주</p>
+          <span>🎰</span>
+          <h1>미니게임</h1>
+          <p className="muted small">달팽이 레이싱 · 홀짝 · 그래프</p>
         </div>
 
         <div className="auth-tabs">

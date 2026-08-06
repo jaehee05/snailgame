@@ -807,3 +807,227 @@ a {
 .auth-card label span {
   color: var(--muted);
 }
+
+/* ── 게임 탭 ────────────────────────────── */
+.game-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.game-tab {
+  flex: 1;
+  min-width: 110px;
+  text-align: center;
+  padding: 10px 12px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+.game-tab:hover {
+  color: var(--text);
+}
+
+.game-tab.is-active {
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.game-tab-icon {
+  margin-right: 6px;
+}
+
+/* ── 홀짝 ───────────────────────────────── */
+.draw-stage {
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  padding: 32px 16px 26px;
+}
+
+.draw-ball {
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 3.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0b0f16;
+  background: radial-gradient(circle at 34% 30%, #fff6d8, var(--accent-2) 62%, #b9820f);
+  box-shadow: 0 14px 40px rgba(242, 177, 52, 0.28);
+}
+
+.draw-ball.is-rolling {
+  animation: ball-shake 0.45s ease-in-out infinite;
+}
+
+@keyframes ball-shake {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-9px) rotate(3deg); }
+}
+
+.draw-tags {
+  display: flex;
+  gap: 10px;
+}
+
+.draw-tags span {
+  padding: 6px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.draw-tags .tag-on,
+.draw-tags span:first-child,
+.draw-tags span:last-child {
+  color: var(--accent);
+  border-color: rgba(94, 232, 200, 0.4);
+  background: rgba(94, 232, 200, 0.1);
+}
+
+.oe-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+}
+
+.oe-pick {
+  display: grid;
+  gap: 2px;
+  padding: 12px 4px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.oe-pick strong {
+  font-size: 0.95rem;
+}
+
+.oe-pick small {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.oe-pick.oe-combo strong {
+  font-size: 0.82rem;
+}
+
+.oe-pick.is-picked {
+  border-color: var(--accent-2);
+  background: rgba(242, 177, 52, 0.12);
+}
+
+/* ── 그래프 ─────────────────────────────── */
+.crash-stage {
+  position: relative;
+  height: 300px;
+  margin: 4px 0 2px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #101825, #0d1420);
+  overflow: hidden;
+}
+
+.crash-chart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.crash-grid {
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 0.3;
+}
+
+.crash-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 6px rgba(94, 232, 200, 0.5));
+}
+
+.crash-stage.is-crashed .crash-line {
+  stroke: var(--danger);
+  filter: drop-shadow(0 0 6px rgba(255, 107, 107, 0.5));
+}
+
+.crash-mult {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 4px;
+  font-size: 3.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  text-shadow: 0 3px 24px rgba(0, 0, 0, 0.6);
+}
+
+.crash-wait {
+  font-size: 1.5rem;
+  color: var(--muted);
+}
+
+.crash-boom {
+  color: var(--danger);
+}
+
+.crash-boom-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--danger);
+  letter-spacing: 0.3em;
+}
+
+.crash-mine {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+  margin-bottom: 10px;
+}
+
+.crash-mine-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+  font-size: 0.85rem;
+}
+
+.auto-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.primary.cashout {
+  background: linear-gradient(90deg, var(--accent-2), #ff9f43);
+  color: #1c1203;
+}
