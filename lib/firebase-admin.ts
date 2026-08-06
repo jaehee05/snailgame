@@ -4,6 +4,9 @@ import { cert, getApps, initializeApp, type App, type ServiceAccount } from "fir
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 
+/** 사용자 입력 문제가 아니라 서버 설정 문제라는 표시 (HTTP 500 으로 나간다) */
+export class ConfigError extends Error {}
+
 function readServiceAccount(): ServiceAccount {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (raw) {
@@ -29,7 +32,7 @@ function readServiceAccount(): ServiceAccount {
     return { projectId, clientEmail, privateKey: privateKey.replace(/\\n/g, "\n") };
   }
 
-  throw new Error(
+  throw new ConfigError(
     "Firebase 서비스 계정이 없습니다. FIREBASE_SERVICE_ACCOUNT (서비스 계정 JSON 또는 base64) 를 환경변수로 설정하세요."
   );
 }

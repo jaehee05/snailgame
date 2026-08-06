@@ -2,6 +2,7 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 
+import { hashPassword, newUid, verifyPassword } from "./auth-session";
 import { oddsFor, payoutOf, type BetKind, type PlacedBet } from "./bets";
 import { MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
@@ -10,13 +11,32 @@ import { isBettingOpen, isRoundFinished, roundCore, roundOutcome } from "./round
 export type UserDoc = {
   uid: string;
   nick: string;
-  email: string;
+  /** 로그인에 쓰는 소문자 아이디 (닉네임과 같지만 대소문자 무시) */
+  loginId: string;
+  passSalt: string;
+  passHash: string;
   balance: number;
   isAdmin: boolean;
   createdAt: number;
   staked: number;
   returned: number;
 };
+
+/** 비밀번호 해시를 뺀, 밖으로 내보내도 되는 형태 */
+export type PublicUser = Omit<UserDoc, "passSalt" | "passHash">;
+
+export function publicUser(user: UserDoc): PublicUser {
+  return {
+    uid: user.uid,
+    nick: user.nick,
+    loginId: user.loginId,
+    balance: user.balance,
+    isAdmin: user.isAdmin,
+    createdAt: user.createdAt,
+    staked: user.staked,
+    returned: user.returned,
+  };
+}
 
 export type RoundResult = {
   roundId: number;
@@ -28,9 +48,10 @@ export type RoundResult = {
 };
 
 const MAX_BETS_PER_ROUND = 20;
+const MIN_PASSWORD = 4;
 
-function adminEmails(): string[] {
-  return (process.env.ADMIN_EMAILS ?? "")
+function adminNicks(): string[] {
+  return (process.env.ADMIN_NICKS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
@@ -40,30 +61,31 @@ export function nickIsValid(nick: string): boolean {
   return /^[가-힣a-zA-Z0-9_]{2,12}$/.test(nick);
 }
 
-/** 로그인한 사용자를 Firestore 에 만들거나 가져온다. 최초 1명과 ADMIN_EMAILS 는 관리자가 된다. */
-export async function ensureUser(
-  uid: string,
-  email: string,
-  wantedNick?: string
-): Promise<UserDoc> {
+/* ── 계정 ─────────────────────────────────────────── */
+
+export async function registerUser(nick: string, password: string): Promise<UserDoc> {
+  if (!nickIsValid(nick)) throw new Error("아이디는 한글/영문/숫자 2~12자여야 합니다.");
+  if (password.length < MIN_PASSWORD) {
+    throw new Error(`비밀번호는 ${MIN_PASSWORD}자 이상이어야 합니다.`);
+  }
+
   const db = adminDb();
-  const userRef = db.collection("users").doc(uid);
-  const snap = await userRef.get();
-  if (snap.exists) return snap.data() as UserDoc;
+  const loginId = nick.toLowerCase();
+  const nickRef = db.collection("nicks").doc(loginId);
+  const uid = newUid();
+  const { salt, hash } = hashPassword(password);
 
-  const nick = (wantedNick ?? email.split("@")[0] ?? "달팽이").slice(0, 12);
-  if (!nickIsValid(nick)) throw new Error("닉네임은 한글/영문/숫자 2~12자여야 합니다.");
-
-  const nickRef = db.collection("nicks").doc(nick.toLowerCase());
+  // 아무도 없을 때 처음 가입한 사람이 관리자가 된다.
   const firstUser = (await db.collection("users").limit(1).get()).empty;
-  const isAdmin = firstUser || adminEmails().includes(email.toLowerCase());
 
   const user: UserDoc = {
     uid,
     nick,
-    email,
+    loginId,
+    passSalt: salt,
+    passHash: hash,
     balance: START_BALANCE,
-    isAdmin,
+    isAdmin: firstUser || adminNicks().includes(loginId),
     createdAt: Date.now(),
     staked: 0,
     returned: 0,
@@ -71,14 +93,38 @@ export async function ensureUser(
 
   await db.runTransaction(async (tx) => {
     const taken = await tx.get(nickRef);
-    if (taken.exists && (taken.data() as { uid: string }).uid !== uid) {
-      throw new Error("이미 사용 중인 닉네임입니다.");
-    }
+    if (taken.exists) throw new Error("이미 사용 중인 아이디입니다.");
     tx.set(nickRef, { uid });
-    tx.set(userRef, user);
+    tx.set(db.collection("users").doc(uid), user);
   });
 
   return user;
+}
+
+export async function loginUser(nick: string, password: string): Promise<UserDoc> {
+  const db = adminDb();
+  const failed = new Error("아이디 또는 비밀번호가 올바르지 않습니다.");
+
+  const nickSnap = await db.collection("nicks").doc(nick.trim().toLowerCase()).get();
+  if (!nickSnap.exists) throw failed;
+
+  const { uid } = nickSnap.data() as { uid: string };
+  const user = await getUser(uid);
+  if (!user || !verifyPassword(password, user.passSalt, user.passHash)) throw failed;
+
+  return user;
+}
+
+export async function changePassword(uid: string, current: string, next: string): Promise<void> {
+  if (next.length < MIN_PASSWORD) {
+    throw new Error(`비밀번호는 ${MIN_PASSWORD}자 이상이어야 합니다.`);
+  }
+  const user = await getUser(uid);
+  if (!user || !verifyPassword(current, user.passSalt, user.passHash)) {
+    throw new Error("현재 비밀번호가 올바르지 않습니다.");
+  }
+  const { salt, hash } = hashPassword(next);
+  await adminDb().collection("users").doc(uid).update({ passSalt: salt, passHash: hash });
 }
 
 export async function getUser(uid: string): Promise<UserDoc | null> {
@@ -86,12 +132,13 @@ export async function getUser(uid: string): Promise<UserDoc | null> {
   return snap.exists ? (snap.data() as UserDoc) : null;
 }
 
-export async function listUsers(): Promise<UserDoc[]> {
+export async function listUsers(): Promise<PublicUser[]> {
   const snap = await adminDb().collection("users").orderBy("createdAt", "asc").get();
-  return snap.docs.map((d) => d.data() as UserDoc);
+  return snap.docs.map((d) => publicUser(d.data() as UserDoc));
 }
 
-/** 특정 회차에 이 사용자가 건 베팅 목록 */
+/* ── 베팅 ─────────────────────────────────────────── */
+
 export async function betsForRound(uid: string, roundId: number): Promise<PlacedBet[]> {
   const snap = await adminDb()
     .collection("users")
@@ -224,6 +271,8 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   return results;
 }
 
+/* ── 관리자 ───────────────────────────────────────── */
+
 export async function grantCoins(
   by: UserDoc,
   toUid: string,
@@ -237,7 +286,7 @@ export async function grantCoins(
   const db = adminDb();
   const userRef = db.collection("users").doc(toUid);
 
-  const balance = await db.runTransaction(async (tx) => {
+  return db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
     if (!snap.exists) throw new Error("대상 사용자를 찾을 수 없습니다.");
     const user = snap.data() as UserDoc;
@@ -256,8 +305,6 @@ export async function grantCoins(
     });
     return next;
   });
-
-  return balance;
 }
 
 export async function recentLedger(limit = 30) {
@@ -269,4 +316,14 @@ export async function setAdmin(by: UserDoc, targetUid: string, isAdmin: boolean)
   if (!by.isAdmin) throw new Error("권한이 없습니다.");
   if (by.uid === targetUid && !isAdmin) throw new Error("본인의 관리자 권한은 해제할 수 없습니다.");
   await adminDb().collection("users").doc(targetUid).update({ isAdmin });
+}
+
+/** 관리자가 참가자 비밀번호를 초기화한다 (친구들끼리 쓰는 게임이라 이메일 인증이 없다) */
+export async function resetPassword(by: UserDoc, targetUid: string, password: string): Promise<void> {
+  if (!by.isAdmin) throw new Error("권한이 없습니다.");
+  if (password.length < MIN_PASSWORD) {
+    throw new Error(`비밀번호는 ${MIN_PASSWORD}자 이상이어야 합니다.`);
+  }
+  const { salt, hash } = hashPassword(password);
+  await adminDb().collection("users").doc(targetUid).update({ passSalt: salt, passHash: hash });
 }

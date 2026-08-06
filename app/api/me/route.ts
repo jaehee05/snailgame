@@ -7,9 +7,7 @@ export const dynamic = "force-dynamic";
 /** 내 상태 조회. 호출될 때마다 밀린 회차 정산을 먼저 따라잡는다. */
 export async function GET(req: Request) {
   try {
-    const url = new URL(req.url);
-    const nick = url.searchParams.get("nick") ?? undefined;
-    const user = await requireUser(req, nick);
+    const user = await requireUser(req);
 
     const now = Date.now();
     const justSettled = await settleUser(user.uid, now);

@@ -1,11 +1,9 @@
 "use client";
 
-import { onAuthStateChanged, type User } from "firebase/auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { OddsTable, PlacedBet } from "./bets";
 import { phaseOf, phaseRemaining, type Phase } from "./config";
-import { auth } from "./firebase-client";
 import type { Racer } from "./race";
 
 export type PublicRound = {
@@ -47,35 +45,27 @@ export type MeState = {
   justSettled: MeState["results"];
 };
 
-/** Firebase 로그인 상태 + 인증 헤더가 붙은 fetch */
-export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+export class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
 
-  useEffect(() => onAuthStateChanged(auth, (u) => {
-    setUser(u);
-    setReady(true);
-  }), []);
-
-  const api = useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
-    const current = auth.currentUser;
-    if (!current) throw new Error("로그인이 필요합니다.");
-    const token = await current.getIdToken();
-    const res = await fetch(path, {
-      ...init,
-      headers: {
-        ...(init?.headers ?? {}),
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`,
-      },
-      cache: "no-store",
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error((json as { error?: string }).error ?? "요청에 실패했습니다.");
-    return json as T;
-  }, []);
-
-  return { user, ready, api };
+/** 세션 쿠키는 브라우저가 알아서 실어 보내므로 따로 붙일 헤더가 없다. */
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+    cache: "no-store",
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new RequestError((json as { error?: string }).error ?? "요청에 실패했습니다.", res.status);
+  }
+  return json as T;
 }
 
 /**
@@ -90,9 +80,7 @@ export function useRound() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/round", { cache: "no-store" });
-      if (!res.ok) throw new Error("회차 정보를 불러오지 못했습니다.");
-      const data = (await res.json()) as RoundPayload;
+      const data = await api<RoundPayload>("/api/round");
       offset.current = data.now - Date.now();
       setPayload(data);
       setError(null);

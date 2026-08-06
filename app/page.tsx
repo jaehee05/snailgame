@@ -4,15 +4,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { BetPanel } from "@/components/BetPanel";
 import { History, MyBets } from "@/components/BetList";
+import { BetPanel } from "@/components/BetPanel";
 import { Fairness } from "@/components/Fairness";
 import { Track } from "@/components/Track";
 import type { BetKind } from "@/lib/bets";
-import { formatClock, formatCoins, useAuth, useRound, type MeState } from "@/lib/client";
+import {
+  api,
+  formatClock,
+  formatCoins,
+  RequestError,
+  useRound,
+  type MeState,
+} from "@/lib/client";
 import { BET_MS, FIELD, TICK_MS } from "@/lib/config";
 import { simulate } from "@/lib/race";
-import { auth } from "@/lib/firebase-client";
 
 const PHASE_LABEL = {
   betting: "베팅 접수 중",
@@ -22,54 +28,45 @@ const PHASE_LABEL = {
 
 export default function GamePage() {
   const router = useRouter();
-  const { user, ready, api } = useAuth();
   const { round, prev, elapsed, phase, remaining, error: roundError } = useRound();
   const [me, setMe] = useState<MeState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (ready && !user) router.replace("/login");
-  }, [ready, user, router]);
-
   const loadMe = useCallback(async () => {
-    if (!auth.currentUser) return;
-    const pendingNick = sessionStorage.getItem("snail:nick");
-    const query = pendingNick ? `?nick=${encodeURIComponent(pendingNick)}` : "";
     try {
-      const data = await api<MeState>(`/api/me${query}`);
-      sessionStorage.removeItem("snail:nick");
+      const data = await api<MeState>("/api/me");
       setMe(data);
       if (data.justSettled.length > 0) {
         const net = data.justSettled.reduce((s, r) => s + r.returned - r.staked, 0);
-        setNotice(
-          net >= 0
-            ? `지난 회차 정산: +${formatCoins(net)} 코인`
-            : `지난 회차 정산: ${formatCoins(net)} 코인`
-        );
+        setNotice(`지난 회차 정산: ${net >= 0 ? "+" : ""}${formatCoins(net)} 코인`);
       }
     } catch (err) {
+      if (err instanceof RequestError && err.status === 401) {
+        router.replace("/login");
+        return;
+      }
       setNotice(err instanceof Error ? err.message : "상태를 불러오지 못했습니다.");
     }
-  }, [api]);
+  }, [router]);
 
-  // 로그인 직후, 회차가 바뀔 때, 결과가 나온 직후에 상태를 다시 맞춘다.
+  // 첫 진입, 회차가 바뀔 때, 결과가 나온 직후에 상태를 다시 맞춘다.
   // (loadMe 는 서버 응답을 받은 뒤에야 setState 하므로 동기 setState 가 아니다)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
-    if (user) loadMe();
-  }, [user, loadMe]);
-
   const roundId = round?.id;
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
-    if (user && roundId !== undefined) loadMe();
-  }, [user, roundId, loadMe]);
+    loadMe();
+  }, [roundId, loadMe]);
 
   useEffect(() => {
-    if (!user || phase !== "result") return;
+    if (phase !== "result") return;
     const t = setTimeout(loadMe, 1200);
     return () => clearTimeout(t);
-  }, [user, phase, roundId, loadMe]);
+  }, [phase, roundId, loadMe]);
+
+  async function logout() {
+    await api("/api/auth", { method: "POST", body: JSON.stringify({ action: "logout" }) });
+    router.replace("/login");
+  }
 
   // 비공개 시드가 공개되는 순간(= 베팅 마감) 경주 전체를 미리 계산해 두고 그대로 재생한다.
   const secretSeed = round?.secretSeed ?? null;
@@ -108,19 +105,11 @@ export default function GamePage() {
       });
       await loadMe();
     },
-    [api, round, loadMe]
+    [round, loadMe]
   );
 
-  if (!ready || !user) {
-    return <main className="center-screen">불러오는 중…</main>;
-  }
-
   if (!round) {
-    return (
-      <main className="center-screen">
-        {roundError ?? "회차 정보를 불러오는 중…"}
-      </main>
-    );
+    return <main className="center-screen">{roundError ?? "회차 정보를 불러오는 중…"}</main>;
   }
 
   const phaseProgress =
@@ -146,10 +135,10 @@ export default function GamePage() {
             <strong>{me ? formatCoins(me.user.balance) : "—"}</strong>
           </div>
           <div className="whoami">
-            <span>{me?.user.nick ?? user.email}</span>
+            <span>{me?.user.nick ?? "…"}</span>
             <div className="links">
               {me?.user.isAdmin && <Link href="/admin">관리자</Link>}
-              <button type="button" onClick={() => auth.signOut()}>
+              <button type="button" onClick={logout}>
                 로그아웃
               </button>
             </div>

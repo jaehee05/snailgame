@@ -4,20 +4,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
-import { formatCoins, useAuth } from "@/lib/client";
+import { api, formatCoins, RequestError } from "@/lib/client";
 
-type UserDoc = {
+type AdminUser = {
   uid: string;
   nick: string;
-  email: string;
   balance: number;
   isAdmin: boolean;
+  createdAt: number;
   staked: number;
   returned: number;
 };
 
 type LedgerEntry = {
-  type: string;
   byNick: string;
   toNick: string;
   amount: number;
@@ -29,67 +28,56 @@ const PRESETS = [1_000, 5_000, 10_000, 50_000];
 
 export default function AdminPage() {
   const router = useRouter();
-  const { user, ready, api } = useAuth();
-  const [users, setUsers] = useState<UserDoc[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [memo, setMemo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (ready && !user) router.replace("/login");
-  }, [ready, user, router]);
-
   const load = useCallback(async () => {
     try {
-      const data = await api<{ users: UserDoc[]; ledger: LedgerEntry[] }>("/api/admin");
+      const data = await api<{ users: AdminUser[]; ledger: LedgerEntry[] }>("/api/admin");
       setUsers(data.users);
       setLedger(data.ledger);
       setError(null);
     } catch (err) {
+      if (err instanceof RequestError && err.status === 401) {
+        router.replace("/login");
+        return;
+      }
       setError(err instanceof Error ? err.message : "불러오지 못했습니다.");
     }
-  }, [api]);
+  }, [router]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
-    if (user) load();
-  }, [user, load]);
+    load();
+  }, [load]);
+
+  async function send(uid: string, body: Record<string, unknown>) {
+    setBusy(uid);
+    try {
+      await api("/api/admin", { method: "POST", body: JSON.stringify({ uid, ...body }) });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "요청에 실패했습니다.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function grant(uid: string, amount: number) {
     if (!amount) return;
-    setBusy(uid);
-    try {
-      await api("/api/admin", {
-        method: "POST",
-        body: JSON.stringify({ action: "grant", uid, amount, memo }),
-      });
-      setAmounts((a) => ({ ...a, [uid]: 0 }));
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "지급에 실패했습니다.");
-    } finally {
-      setBusy(null);
-    }
+    await send(uid, { action: "grant", amount, memo });
+    setAmounts((a) => ({ ...a, [uid]: 0 }));
   }
 
-  async function toggleAdmin(target: UserDoc) {
-    setBusy(target.uid);
-    try {
-      await api("/api/admin", {
-        method: "POST",
-        body: JSON.stringify({ action: "setAdmin", uid: target.uid, isAdmin: !target.isAdmin }),
-      });
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "변경에 실패했습니다.");
-    } finally {
-      setBusy(null);
-    }
+  async function resetPassword(user: AdminUser) {
+    const password = window.prompt(`${user.nick} 님의 새 비밀번호 (4자 이상)`);
+    if (!password) return;
+    await send(user.uid, { action: "resetPassword", password });
   }
-
-  if (!ready || !user) return <main className="center-screen">불러오는 중…</main>;
 
   return (
     <div className="app">
@@ -124,13 +112,13 @@ export default function AdminPage() {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th>닉네임</th>
-                  <th>이메일</th>
+                  <th>아이디</th>
                   <th className="num">보유</th>
                   <th className="num">누적 베팅</th>
                   <th className="num">누적 회수</th>
                   <th>지급 / 회수</th>
                   <th>권한</th>
+                  <th>비밀번호</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,7 +129,6 @@ export default function AdminPage() {
                       <td>
                         <strong>{u.nick}</strong>
                       </td>
-                      <td className="muted small">{u.email}</td>
                       <td className="num">{formatCoins(u.balance)}</td>
                       <td className="num muted">{formatCoins(u.staked ?? 0)}</td>
                       <td className="num muted">{formatCoins(u.returned ?? 0)}</td>
@@ -152,7 +139,9 @@ export default function AdminPage() {
                               key={p}
                               type="button"
                               className="chip"
-                              onClick={() => setAmounts((a) => ({ ...a, [u.uid]: (a[u.uid] ?? 0) + p }))}
+                              onClick={() =>
+                                setAmounts((a) => ({ ...a, [u.uid]: (a[u.uid] ?? 0) + p }))
+                              }
                             >
                               +{p / 1000}k
                             </button>
@@ -161,7 +150,10 @@ export default function AdminPage() {
                             type="number"
                             value={amount}
                             onChange={(e) =>
-                              setAmounts((a) => ({ ...a, [u.uid]: Math.floor(Number(e.target.value) || 0) }))
+                              setAmounts((a) => ({
+                                ...a,
+                                [u.uid]: Math.floor(Number(e.target.value) || 0),
+                              }))
                             }
                           />
                           <button
@@ -187,9 +179,19 @@ export default function AdminPage() {
                           type="button"
                           className={u.isAdmin ? "chip is-admin" : "chip"}
                           disabled={busy === u.uid}
-                          onClick={() => toggleAdmin(u)}
+                          onClick={() => send(u.uid, { action: "setAdmin", isAdmin: !u.isAdmin })}
                         >
                           {u.isAdmin ? "관리자" : "일반"}
+                        </button>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="chip chip-ghost"
+                          disabled={busy === u.uid}
+                          onClick={() => resetPassword(u)}
+                        >
+                          초기화
                         </button>
                       </td>
                     </tr>
