@@ -58,6 +58,8 @@ function adminNicks(): string[] {
 }
 
 export function nickIsValid(nick: string): boolean {
+  // 앞뒤가 이중 밑줄인 이름(__foo__)은 Firestore 문서 ID 예약어라 쓸 수 없다.
+  if (/^__.*__$/.test(nick)) return false;
   return /^[가-힣a-zA-Z0-9_]{2,12}$/.test(nick);
 }
 
@@ -104,6 +106,9 @@ export async function registerUser(nick: string, password: string): Promise<User
 export async function loginUser(nick: string, password: string): Promise<UserDoc> {
   const db = adminDb();
   const failed = new Error("아이디 또는 비밀번호가 올바르지 않습니다.");
+
+  // 쓸 수 없는 형식이면 조회조차 하지 않는다 (Firestore 예약어로 조회하면 에러가 난다)
+  if (!nickIsValid(nick.trim())) throw failed;
 
   const nickSnap = await db.collection("nicks").doc(nick.trim().toLowerCase()).get();
   if (!nickSnap.exists) throw failed;
@@ -170,7 +175,9 @@ export async function placeBet(
 ): Promise<{ bet: PlacedBet; balance: number }> {
   if (!isBettingOpen(roundId, now)) throw new Error("이번 회차 베팅이 마감되었습니다.");
   if (!Number.isInteger(amount) || amount < MIN_BET || amount > MAX_BET) {
-    throw new Error(`베팅 금액은 ${MIN_BET.toLocaleString()} 코인 이상이어야 합니다.`);
+    throw new Error(
+      `베팅 금액은 ${MIN_BET.toLocaleString()} ~ ${MAX_BET.toLocaleString()} 코인 사이여야 합니다.`
+    );
   }
 
   // 배당은 클라이언트 값을 믿지 않고 서버가 다시 계산한다.
