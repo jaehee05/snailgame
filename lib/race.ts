@@ -49,7 +49,7 @@ const STALL_MULT = 0.15;
 const BOOST_CHANCE = 0.024;
 const STALL_CHANCE = 0.022;
 /** 이 틱 이후로는 낮잠이 시작되지 않는다 (제한 시간 내 완주 보장) */
-const STALL_CUTOFF = MAX_TICKS - 90;
+const STALL_CUTOFF = 170;
 /**
  * 한 경주에서 낮잠은 이 횟수까지만.
  * 무제한이면 몇 번씩 뻗는 달팽이가 나와 경주 시간 꼬리가 길어지고(최대 33초),

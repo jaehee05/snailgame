@@ -1,18 +1,31 @@
-/** 한 회차의 총 길이 (ms) */
-export const ROUND_MS = 70_000;
 /** 베팅 접수 구간 */
 export const BET_MS = 35_000;
-/** 경주 구간 */
-export const RACE_MS = 26_000;
-/** 결과 확인 구간 (나머지) */
-export const RESULT_MS = ROUND_MS - BET_MS - RACE_MS;
+/**
+ * 화면에서 경주가 재생되는 시간. 회차와 무관하게 항상 같다.
+ * 시뮬레이션 자체는 회차마다 길이가 다르지만(11~24초), 그걸 이 시간에 맞춰
+ * 늘리거나 줄여서 재생한다. 순위와 전개는 그대로고 재생 속도만 달라진다.
+ * 덕분에 출발선에서 기다리거나 다 들어온 달팽이를 멍하니 보는 시간이 없다.
+ */
+export const RACE_MS = 20_000;
+/** 마지막 달팽이가 들어오고 결과를 발표하기까지의 뜸 */
+export const RESULT_DELAY_MS = 3_000;
+/** 결과 화면이 떠 있는 시간 (항상 고정) */
+export const RESULT_MS = 10_000;
+
+/** 결승선 통과가 완료되는 시각 (회차 시작 기준) */
+export const FINISH_AT = BET_MS + RACE_MS;
+/** 결과 발표 시각 (회차 시작 기준) */
+export const RESULT_AT = FINISH_AT + RESULT_DELAY_MS;
+/** 한 회차의 총 길이 */
+export const ROUND_MS = RESULT_AT + RESULT_MS;
 
 /** 시뮬레이션 1틱 = 100ms */
 export const TICK_MS = 100;
-export const MAX_TICKS = Math.floor(RACE_MS / TICK_MS);
+/** 시뮬레이션 상한. 재생 시간(RACE_MS)과는 별개다. */
+export const MAX_TICKS = 260;
 /** 트랙 길이 (임의 단위) */
 export const TRACK = 1000;
-/** 틱당 기본 이동거리 → 평균 완주 약 22초 */
+/** 틱당 기본 이동거리 */
 export const BASE_SPEED = 5.8;
 
 /** 회차당 출전 마릿수 */
@@ -39,22 +52,3 @@ export function roundIdAt(now: number): number {
 export function roundStart(roundId: number): number {
   return roundId * ROUND_MS;
 }
-
-export function phaseOf(elapsed: number): Phase {
-  if (elapsed < BET_MS) return "betting";
-  if (elapsed < BET_MS + RACE_MS) return "racing";
-  return "result";
-}
-
-/** 현재 페이즈가 끝날 때까지 남은 ms */
-export function phaseRemaining(elapsed: number): number {
-  if (elapsed < BET_MS) return BET_MS - elapsed;
-  if (elapsed < BET_MS + RACE_MS) return BET_MS + RACE_MS - elapsed;
-  return ROUND_MS - elapsed;
-}
-
-/**
- * 마지막 달팽이가 들어오고 결과를 발표하기까지의 뜸.
- * 경주는 보통 20초쯤에 끝나므로 RACE_MS 를 다 기다리지 않는다.
- */
-export const RESULT_DELAY_MS = 3_000;

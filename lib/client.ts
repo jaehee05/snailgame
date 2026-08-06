@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { OddsTable, PlacedBet } from "./bets";
-import { phaseOf, phaseRemaining, type Phase } from "./config";
 import type { Racer } from "./race";
 
 export type PublicRound = {
@@ -102,17 +101,14 @@ export function useRound() {
   }, [refresh]);
 
   const round = payload?.round ?? null;
-  const elapsed = round ? now - round.start : 0;
-  const phase: Phase = round ? phaseOf(elapsed) : "betting";
 
   return {
     payload,
     round,
     prev: payload?.prev ?? null,
     now,
-    elapsed,
-    phase,
-    remaining: round ? Math.max(0, phaseRemaining(elapsed)) : 0,
+    // 회차 시작으로부터 지난 시간. 단계 판정은 경주 길이를 아는 화면 쪽에서 한다.
+    elapsed: round ? now - round.start : 0,
     error,
     refresh,
   };

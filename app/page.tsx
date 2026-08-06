@@ -17,18 +17,18 @@ import {
   useRound,
   type MeState,
 } from "@/lib/client";
-import { BET_MS, FIELD, RACE_MS, RESULT_DELAY_MS, ROUND_MS, TICK_MS } from "@/lib/config";
+import { BET_MS, FIELD, FINISH_AT, RACE_MS, RESULT_AT, ROUND_MS, type Phase } from "@/lib/config";
 import { simulate } from "@/lib/race";
 
-const PHASE_LABEL = {
+const PHASE_LABEL: Record<Phase, string> = {
   betting: "베팅 접수 중",
   racing: "경주 진행 중",
-  result: "결과 확인",
-} as const;
+  result: "결과 발표",
+};
 
 export default function GamePage() {
   const router = useRouter();
-  const { round, prev, elapsed, phase, error: roundError } = useRound();
+  const { round, prev, elapsed, error: roundError } = useRound();
   const [me, setMe] = useState<MeState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -78,30 +78,30 @@ export default function GamePage() {
     [secretSeed, racers]
   );
 
+  // 시뮬레이션 길이가 몇 초든 RACE_MS 안에 다 재생한다.
   const raceElapsed = elapsed - BET_MS;
   const progress = useMemo(() => {
     if (!outcome || raceElapsed <= 0) return new Array(FIELD).fill(0);
-    const t = raceElapsed / TICK_MS;
-    const i = Math.min(outcome.frames.length - 1, Math.floor(t));
-    const next = Math.min(outcome.frames.length - 1, i + 1);
-    const f = t - Math.floor(t);
+    const last = outcome.frames.length - 1;
+    const t = Math.min(1, raceElapsed / RACE_MS) * last;
+    const i = Math.min(last, Math.floor(t));
+    const next = Math.min(last, i + 1);
+    const f = t - i;
     return outcome.frames[i].map((v, lane) => v + (outcome.frames[next][lane] - v) * f);
   }, [outcome, raceElapsed]);
 
-  const raceOver =
-    Boolean(outcome) && (phase === "result" || raceElapsed >= outcome!.ticks * TICK_MS);
+  const raceOver = Boolean(outcome) && elapsed >= FINISH_AT;
   const shownOrder = raceOver && outcome ? outcome.order : null;
 
-  // 마지막 달팽이가 들어오면 RACE_MS 를 다 기다리지 않고 잠깐 뜸 들인 뒤 결과를 낸다.
-  const resultAt = outcome ? BET_MS + outcome.ticks * TICK_MS + RESULT_DELAY_MS : BET_MS + RACE_MS;
-  const shownPhase: typeof phase =
-    elapsed < BET_MS ? "betting" : elapsed < resultAt ? "racing" : "result";
+  const shownPhase: Phase =
+    elapsed < BET_MS ? "betting" : elapsed < RESULT_AT ? "racing" : "result";
+
   const shownRemaining = Math.max(
     0,
     shownPhase === "betting"
       ? BET_MS - elapsed
       : shownPhase === "racing"
-        ? resultAt - elapsed
+        ? RESULT_AT - elapsed
         : ROUND_MS - elapsed
   );
 
@@ -140,7 +140,7 @@ export default function GamePage() {
     shownPhase === "betting"
       ? 1 - shownRemaining / BET_MS
       : shownPhase === "racing"
-        ? Math.min(1, raceElapsed / (outcome ? outcome.ticks * TICK_MS : 1))
+        ? Math.min(1, raceElapsed / RACE_MS)
         : 1;
 
   return (
