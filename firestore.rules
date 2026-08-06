@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// 이 게임의 모든 데이터(잔액·베팅·정산)는 서버의 Firebase Admin SDK 를 통해서만
+// 읽고 쓴다. Admin SDK 는 보안 규칙을 우회하므로, 클라이언트에는 아무 권한도 주지 않는다.
+// 브라우저에서 Firestore 를 직접 건드려 잔액을 고치는 것을 막기 위한 설정이다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

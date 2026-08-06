@@ -1,0 +1,809 @@
+:root {
+  --bg: #0b0f16;
+  --bg-soft: #131a25;
+  --panel: #161e2b;
+  --panel-2: #1c2634;
+  --line: #26324a;
+  --text: #e7edf7;
+  --muted: #8ea0bd;
+  --accent: #5ee8c8;
+  --accent-2: #f2b134;
+  --danger: #ff6b6b;
+  --ok: #7bd88f;
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: radial-gradient(1200px 600px at 50% -10%, #1a2536 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family:
+    "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  min-height: 100%;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.center {
+  text-align: center;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.ok-text {
+  color: var(--ok);
+}
+
+.net-up {
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+
+.net-down {
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+}
+
+.center-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--muted);
+}
+
+/* ── 상단바 ─────────────────────────────── */
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 16px 60px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  font-size: 28px;
+}
+
+.brand strong {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.brand small {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.balance {
+  text-align: right;
+}
+
+.balance small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.balance strong {
+  font-size: 1.35rem;
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.whoami {
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+.whoami .links {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.whoami button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 0;
+  font-size: 0.82rem;
+}
+
+.notice {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(94, 232, 200, 0.12);
+  border: 1px solid rgba(94, 232, 200, 0.3);
+  color: var(--accent);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* ── 레이아웃 ───────────────────────────── */
+.layout {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.stage,
+.side,
+.bottom {
+  min-width: 0;
+}
+
+.side {
+  display: grid;
+  gap: 16px;
+}
+
+.bottom {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.admin-layout {
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 900px) {
+  .layout,
+  .bottom {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel-title h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(94, 232, 200, 0.14);
+  color: var(--accent);
+}
+
+.badge-muted {
+  background: rgba(142, 160, 189, 0.16);
+  color: var(--muted);
+}
+
+.badge-ok {
+  background: rgba(123, 216, 143, 0.16);
+  color: var(--ok);
+}
+
+.badge-fail {
+  background: rgba(255, 107, 107, 0.16);
+  color: var(--danger);
+}
+
+/* ── 경주장 ─────────────────────────────── */
+.stage {
+  background: linear-gradient(180deg, #16202f, #121a27);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.stage-head > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.round-no {
+  font-family: ui-monospace, monospace;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.phase {
+  font-size: 0.8rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.phase-betting {
+  color: var(--accent-2);
+  border-color: rgba(242, 177, 52, 0.4);
+  background: rgba(242, 177, 52, 0.1);
+}
+
+.phase-racing {
+  color: var(--accent);
+  border-color: rgba(94, 232, 200, 0.4);
+  background: rgba(94, 232, 200, 0.1);
+}
+
+.phase-result {
+  color: var(--muted);
+}
+
+.clock {
+  font-family: ui-monospace, monospace;
+  font-size: 1.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.phase-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.phase-bar div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.1s linear;
+}
+
+.track {
+  display: grid;
+  gap: 10px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.lane-picked {
+  border-color: rgba(242, 177, 52, 0.35);
+  background: rgba(242, 177, 52, 0.06);
+}
+
+.lane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.lane-no {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+}
+
+.lane-strip {
+  position: relative;
+  height: 38px;
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 2px, transparent 2px 26px),
+    var(--bg-soft);
+  border: 1px solid var(--line);
+}
+
+.lane-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 10px 0 0 10px;
+  background: linear-gradient(90deg, rgba(94, 232, 200, 0.08), rgba(94, 232, 200, 0.16));
+}
+
+.lane-goal {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  border-radius: 0 9px 9px 0;
+  background: repeating-linear-gradient(
+    45deg,
+    #e7edf7 0 4px,
+    #2b3547 4px 8px
+  );
+  opacity: 0.7;
+}
+
+.runner {
+  position: absolute;
+  top: 50%;
+  margin-top: -19px;
+  padding: 0 6px;
+  will-change: transform;
+}
+
+.lane-rank {
+  text-align: right;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lane-medal {
+  font-size: 0.95rem;
+}
+
+.result-strip {
+  margin-top: 14px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(94, 232, 200, 0.08);
+  border: 1px solid rgba(94, 232, 200, 0.2);
+  font-size: 0.9rem;
+}
+
+.result-strip b {
+  color: var(--accent);
+  margin-right: 4px;
+}
+
+/* ── 베팅 패널 ──────────────────────────── */
+.panel-locked {
+  opacity: 0.75;
+}
+
+.kind-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  background: var(--bg-soft);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.kind-tab {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 2px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.kind-tab strong {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.kind-tab small {
+  font-size: 0.62rem;
+  opacity: 0.8;
+}
+
+.kind-tab.is-active {
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.kind-desc {
+  margin: 10px 2px 12px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.pick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.pick {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.pick.is-picked {
+  border-color: var(--accent-2);
+  background: rgba(242, 177, 52, 0.1);
+}
+
+.pick-order {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  font-size: 0.62rem;
+  color: var(--accent-2);
+}
+
+.pick-name {
+  font-size: 0.86rem;
+}
+
+.pick-odds {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.amount-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.chip-ghost {
+  color: var(--muted);
+}
+
+.chip.is-admin {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.amount-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+
+.amount-input span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.amount-input input,
+.memo-input,
+.grant-row input,
+.auth-card input {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount-input input:focus,
+.auth-card input:focus {
+  outline: 2px solid rgba(94, 232, 200, 0.4);
+  outline-offset: 1px;
+}
+
+.payout-preview {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+  font-size: 0.85rem;
+}
+
+.payout-preview strong {
+  color: var(--accent-2);
+}
+
+.primary {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--accent), #57c9f0);
+  color: #06121b;
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.small-btn {
+  width: auto;
+  padding: 6px 12px;
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+/* ── 목록 ───────────────────────────────── */
+.bet-list,
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.bet-list li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  font-size: 0.84rem;
+}
+
+.bet-list li.hit {
+  background: rgba(123, 216, 143, 0.12);
+}
+
+.bet-list li.miss {
+  opacity: 0.55;
+}
+
+.bet-kind {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.bet-amount {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.bet-result {
+  font-weight: 700;
+  color: var(--ok);
+  font-size: 0.8rem;
+}
+
+.history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  font-size: 0.84rem;
+}
+
+.history-order {
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+/* ── 공정성 ─────────────────────────────── */
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 12px 0 8px;
+  font-size: 0.82rem;
+}
+
+.kv dt {
+  color: var(--muted);
+}
+
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── 관리자 ─────────────────────────────── */
+.table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 760px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.admin-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.76rem;
+}
+
+.admin-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.grant-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.grant-row input {
+  width: 96px;
+}
+
+.memo-input {
+  width: 220px;
+}
+
+/* ── 로그인 ─────────────────────────────── */
+.auth-card {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 28px 24px;
+  display: grid;
+  gap: 14px;
+}
+
+.auth-brand {
+  text-align: center;
+  display: grid;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.auth-brand span {
+  font-size: 40px;
+}
+
+.auth-brand h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.auth-brand p {
+  margin: 0;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--bg-soft);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.auth-tabs button {
+  background: none;
+  border: none;
+  padding: 9px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.auth-tabs button.is-active {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.auth-card label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.85rem;
+}
+
+.auth-card label span {
+  color: var(--muted);
+}
