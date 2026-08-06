@@ -1,9 +1,9 @@
 /** 한 회차의 총 길이 (ms) */
-export const ROUND_MS = 90_000;
+export const ROUND_MS = 70_000;
 /** 베팅 접수 구간 */
-export const BET_MS = 45_000;
+export const BET_MS = 35_000;
 /** 경주 구간 */
-export const RACE_MS = 34_000;
+export const RACE_MS = 26_000;
 /** 결과 확인 구간 (나머지) */
 export const RESULT_MS = ROUND_MS - BET_MS - RACE_MS;
 

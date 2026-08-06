@@ -50,6 +50,12 @@ const BOOST_CHANCE = 0.024;
 const STALL_CHANCE = 0.022;
 /** 이 틱 이후로는 낮잠이 시작되지 않는다 (제한 시간 내 완주 보장) */
 const STALL_CUTOFF = MAX_TICKS - 90;
+/**
+ * 한 경주에서 낮잠은 이 횟수까지만.
+ * 무제한이면 몇 번씩 뻗는 달팽이가 나와 경주 시간 꼬리가 길어지고(최대 33초),
+ * 그만큼 결과 화면을 오래 붙잡고 있어야 한다.
+ */
+const MAX_STALLS = 2;
 
 /** 공개 시드로부터 출전표를 만든다. 베팅 시작 시점에 모두에게 공개된다. */
 export function buildLineup(publicSeed: string): Racer[] {
@@ -85,6 +91,7 @@ export function simulate(racers: Racer[], seed: string, record = false): RaceOut
   const pos = new Array<number>(n).fill(0);
   const boost = new Array<number>(n).fill(0);
   const stall = new Array<number>(n).fill(0);
+  const stallsUsed = new Array<number>(n).fill(0);
   const finishTick = new Array<number>(n).fill(-1);
   const frames: number[][] = [];
 
@@ -105,8 +112,13 @@ export function simulate(racers: Racer[], seed: string, record = false): RaceOut
         const roll = rnd();
         if (roll < r.burst * BOOST_CHANCE) boost[i] = 15 + Math.floor(rnd() * 20);
         // 막판에 낮잠이 들면 제한 시간 안에 못 들어와 화면에서 멈춰 버린다.
-        else if (t < STALL_CUTOFF && roll > 1 - r.stall * STALL_CHANCE) {
+        else if (
+          t < STALL_CUTOFF &&
+          stallsUsed[i] < MAX_STALLS &&
+          roll > 1 - r.stall * STALL_CHANCE
+        ) {
           stall[i] = 12 + Math.floor(rnd() * 22);
+          stallsUsed[i]++;
         }
       }
 
