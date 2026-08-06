@@ -57,10 +57,10 @@ export function GameShell({
   const [menuOpen, setMenuOpen] = useState(false);
   const balance = useCountUp(me?.user.balance ?? 0);
 
-  // 토스트는 잠깐 떴다 사라진다.
+  // 안내 문구는 3초 뒤 사라진다 (누르면 바로 닫힌다).
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(onDismissNotice, 4200);
+    const t = setTimeout(onDismissNotice, 3000);
     return () => clearTimeout(t);
   }, [notice, onDismissNotice]);
 
