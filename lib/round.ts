@@ -1,5 +1,13 @@
 import { buildOdds, type OddsTable } from "./bets";
-import { BET_MS, RACE_MS, ROUND_MS, roundIdAt, roundStart } from "./config";
+import {
+  BET_MS,
+  RACE_MS,
+  RESULT_DELAY_MS,
+  ROUND_MS,
+  TICK_MS,
+  roundIdAt,
+  roundStart,
+} from "./config";
 import { buildLineup, simulate, type Racer, type RaceOutcome } from "./race";
 import { commitOf, publicSeedOf, secretSeedOf } from "./seeds";
 
@@ -34,9 +42,21 @@ export function roundOutcome(roundId: number): RaceOutcome {
   return simulate(racers, secretSeedOf(roundId));
 }
 
-/** 해당 회차의 경주가 이미 끝났는가 (= 정산 가능한가) */
+/**
+ * 해당 회차의 경주가 이미 끝났는가 (= 정산 가능한가).
+ * 실제 경주 길이는 회차마다 다르므로, RACE_MS 를 다 기다리지 않고
+ * 마지막 달팽이가 들어온 시점을 기준으로 판단한다.
+ */
 export function isRoundFinished(roundId: number, now: number): boolean {
-  return now >= roundStart(roundId) + BET_MS + RACE_MS;
+  const elapsed = now - roundStart(roundId);
+  if (elapsed >= BET_MS + RACE_MS) return true; // 지난 회차는 계산할 필요도 없다
+  if (elapsed < BET_MS) return false;
+  return elapsed >= BET_MS + roundOutcome(roundId).ticks * TICK_MS;
+}
+
+/** 이 회차의 결과 발표 시각 (회차 시작 기준 경과 ms) */
+export function resultAtOf(roundId: number): number {
+  return BET_MS + roundOutcome(roundId).ticks * TICK_MS + RESULT_DELAY_MS;
 }
 
 /** 아직 베팅을 받을 수 있는 회차인가 */

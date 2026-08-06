@@ -17,7 +17,7 @@ import {
   useRound,
   type MeState,
 } from "@/lib/client";
-import { BET_MS, FIELD, TICK_MS } from "@/lib/config";
+import { BET_MS, FIELD, RACE_MS, RESULT_DELAY_MS, ROUND_MS, TICK_MS } from "@/lib/config";
 import { simulate } from "@/lib/race";
 
 const PHASE_LABEL = {
@@ -28,7 +28,7 @@ const PHASE_LABEL = {
 
 export default function GamePage() {
   const router = useRouter();
-  const { round, prev, elapsed, phase, remaining, error: roundError } = useRound();
+  const { round, prev, elapsed, phase, error: roundError } = useRound();
   const [me, setMe] = useState<MeState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
@@ -65,12 +65,6 @@ export default function GamePage() {
     loadMe();
   }, [roundId, loadMe]);
 
-  useEffect(() => {
-    if (phase !== "result") return;
-    const t = setTimeout(loadMe, 1200);
-    return () => clearTimeout(t);
-  }, [phase, roundId, loadMe]);
-
   async function logout() {
     await api("/api/auth", { method: "POST", body: JSON.stringify({ action: "logout" }) });
     router.replace("/login");
@@ -98,6 +92,26 @@ export default function GamePage() {
     Boolean(outcome) && (phase === "result" || raceElapsed >= outcome!.ticks * TICK_MS);
   const shownOrder = raceOver && outcome ? outcome.order : null;
 
+  // 마지막 달팽이가 들어오면 RACE_MS 를 다 기다리지 않고 잠깐 뜸 들인 뒤 결과를 낸다.
+  const resultAt = outcome ? BET_MS + outcome.ticks * TICK_MS + RESULT_DELAY_MS : BET_MS + RACE_MS;
+  const shownPhase: typeof phase =
+    elapsed < BET_MS ? "betting" : elapsed < resultAt ? "racing" : "result";
+  const shownRemaining = Math.max(
+    0,
+    shownPhase === "betting"
+      ? BET_MS - elapsed
+      : shownPhase === "racing"
+        ? resultAt - elapsed
+        : ROUND_MS - elapsed
+  );
+
+  // 결과가 발표되면 서버가 정산을 끝냈을 시점이므로 잔액을 다시 받아온다.
+  useEffect(() => {
+    if (shownPhase !== "result") return;
+    const t = setTimeout(loadMe, 800);
+    return () => clearTimeout(t);
+  }, [shownPhase, roundId, loadMe]);
+
   const picked = useMemo(() => {
     const set = new Set<number>();
     for (const bet of me?.bets ?? []) for (const p of bet.picks) set.add(p);
@@ -123,9 +137,9 @@ export default function GamePage() {
   }
 
   const phaseProgress =
-    phase === "betting"
-      ? 1 - remaining / BET_MS
-      : phase === "racing"
+    shownPhase === "betting"
+      ? 1 - shownRemaining / BET_MS
+      : shownPhase === "racing"
         ? Math.min(1, raceElapsed / (outcome ? outcome.ticks * TICK_MS : 1))
         : 1;
 
@@ -167,9 +181,9 @@ export default function GamePage() {
           <div className="stage-head">
             <div>
               <span className="round-no">#{round.id}</span>
-              <span className={`phase phase-${phase}`}>{PHASE_LABEL[phase]}</span>
+              <span className={`phase phase-${shownPhase}`}>{PHASE_LABEL[shownPhase]}</span>
             </div>
-            <span className="clock">{formatClock(remaining)}</span>
+            <span className="clock">{formatClock(shownRemaining)}</span>
           </div>
           <div className="phase-bar">
             <div style={{ width: `${Math.min(100, phaseProgress * 100)}%` }} />
@@ -183,7 +197,7 @@ export default function GamePage() {
             picked={picked}
           />
 
-          {shownOrder && (
+          {shownPhase === "result" && shownOrder && (
             <div className="result-strip">
               {shownOrder.slice(0, 3).map((lane, i) => (
                 <span key={lane}>
@@ -199,7 +213,7 @@ export default function GamePage() {
             racers={round.racers}
             odds={round.odds}
             balance={me?.user.balance ?? 0}
-            open={phase === "betting"}
+            open={shownPhase === "betting"}
             onPlace={placeBet}
           />
           <MyBets bets={me?.bets ?? []} racers={round.racers} order={shownOrder} />

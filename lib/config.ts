@@ -53,7 +53,8 @@ export function phaseRemaining(elapsed: number): number {
   return ROUND_MS - elapsed;
 }
 
-/** 해당 회차의 경주가 끝난 시각 (이 시점 이후 정산 가능) */
-export function raceEndAt(roundId: number): number {
-  return roundStart(roundId) + BET_MS + RACE_MS;
-}
+/**
+ * 마지막 달팽이가 들어오고 결과를 발표하기까지의 뜸.
+ * 경주는 보통 20초쯤에 끝나므로 RACE_MS 를 다 기다리지 않는다.
+ */
+export const RESULT_DELAY_MS = 3_000;
