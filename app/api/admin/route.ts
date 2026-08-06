@@ -36,8 +36,7 @@ export async function POST(req: Request) {
     };
 
     if (body.action === "bingoSkip") {
-      const drawAt = await skipBingoDraw(me, Date.now());
-      return Response.json({ ok: true, drawAt });
+      return Response.json({ ok: true, schedule: await skipBingoDraw(me, Date.now()) });
     }
 
     if (!body.uid) throw new ApiError("대상 사용자를 지정해 주세요.", 400);

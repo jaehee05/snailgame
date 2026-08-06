@@ -1161,3 +1161,109 @@ a {
   color: var(--accent);
   background: rgba(94, 232, 200, 0.08);
 }
+
+/* ── 모바일 ─────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+button,
+a,
+input {
+  touch-action: manipulation;
+}
+
+/* iOS 는 글자 16px 미만 입력칸에 포커스하면 화면을 확대해 버린다 */
+input[type="number"],
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  font-size: 16px;
+}
+
+.bpick-col.is-done .bpick-col-head strong { color: var(--accent-2); }
+
+@media (max-width: 720px) {
+  .app { padding: 12px 12px calc(56px + env(safe-area-inset-bottom)); }
+
+  .topbar { padding: 11px 13px; gap: 10px; border-radius: var(--r); }
+  .brand-mark { font-size: 22px; }
+  .brand strong { font-size: 0.92rem; }
+  .brand small { display: none; }
+  .topbar-right { gap: 12px; }
+  .balance strong { font-size: 1.05rem; }
+  .whoami { font-size: 0.78rem; }
+
+  .game-tab { min-width: 84px; padding: 10px 8px; font-size: 0.8rem; gap: 5px; }
+  .game-tab-name { display: none; }
+  .game-tab.is-active .game-tab-name { display: inline; }
+  .game-tab-icon { font-size: 1.15rem; }
+
+  .stage, .panel { padding: 12px; }
+  .clock { font-size: 1.3rem; }
+  .panel-title h2 { font-size: 0.76rem; }
+
+  /* 달팽이 */
+  .lane { grid-template-columns: 68px minmax(0, 1fr) 38px; gap: 7px; padding: 4px; }
+  .lane-head { font-size: 0.8rem; gap: 4px; }
+  .lane-no { display: none; }
+  .lane-strip { height: 32px; }
+  .runner { margin-top: -15px; }
+  .kind-tab strong { font-size: 0.75rem; }
+  .kind-tab small { font-size: 0.55rem; }
+
+  /* 홀짝 */
+  .draw-ball { width: 118px; height: 118px; font-size: 2.7rem; }
+  .draw-stage { padding: 22px 8px 18px; }
+  .oe-pick { padding: 10px 2px; }
+  .oe-pick strong { font-size: 0.85rem; }
+  .oe-pick.oe-combo strong { font-size: 0.72rem; }
+
+  /* 그래프 */
+  .crash-stage { height: 220px; }
+  .crash-mult { font-size: 2.4rem; }
+  .crash-wait { font-size: 1.15rem; }
+
+  /* 메가빙고 — 열을 세로로 눕혀 번호를 크게 */
+  .bpick-board { grid-template-columns: 1fr; gap: 10px; }
+  .bpick-col { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 8px; }
+  .bpick-col-head { flex-direction: column; gap: 0; margin-bottom: 0; }
+  .bpick-col-head strong { font-size: 1.15rem; }
+  .bpick-nums { grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  .bnum { font-size: 0.8rem; border-radius: 7px; }
+
+  .bdraw-row { grid-template-columns: 18px repeat(15, 1fr); gap: 2px; }
+  .bdraw-label { font-size: 0.66rem; }
+  .bdraw-num { font-size: 0.55rem; }
+  .bball { width: 96px; height: 96px; }
+  .bball-num { font-size: 2.1rem; }
+
+  .bcards { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 7px; }
+  .bcell { font-size: 0.55rem; }
+
+  .prize-list li { grid-template-columns: 30px 1fr auto; font-size: 0.76rem; padding: 6px 8px; }
+  .prize-cells { display: none; }
+
+  /* 트리플럭 */
+  .tl-scratch { height: 96px; }
+  .tl-symbols span { min-width: 40px; font-size: 0.82rem; padding: 7px 4px; }
+
+  .bet-list li { grid-template-columns: 38px minmax(0, 1fr) auto; font-size: 0.78rem; }
+  .bet-list .bet-amount { display: none; }
+  .history li { font-size: 0.78rem; }
+
+  .chip { padding: 6px 11px; font-size: 0.76rem; }
+  .primary { padding: 13px; }
+}
+
+@media (max-width: 400px) {
+  .bpick-nums { grid-template-columns: repeat(5, 1fr); }
+  .oe-grid { grid-template-columns: repeat(2, 1fr); }
+  .bingo-picks { grid-template-columns: repeat(3, 1fr); }
+  .kind-tabs { grid-template-columns: repeat(3, 1fr); }
+}

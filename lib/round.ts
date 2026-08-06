@@ -1,6 +1,6 @@
 import { buildOdds, type OddsTable } from "./bets";
 import { TICK_MS } from "./config";
-import { BINGO_TIMING, DRAW_COUNT } from "./games/bingo";
+import { BINGO_TIMING, DRAW_COUNT, type BingoSchedule } from "./games/bingo";
 import { CRASH_TIMING, crashAtOf, crashPointOf, MAX_MULT } from "./games/crash";
 import { ODDEVEN_SETTLE_AT, ODDEVEN_TIMING } from "./games/oddeven";
 import { SNAIL_FINISH_AT, SNAIL_ROUND_MS, SNAIL_TIMING } from "./games/snail";
@@ -59,21 +59,8 @@ export function snailOutcome(roundId: number): RaceOutcome {
 
 /* ── 회차 상태 ──────────────────────────────────────────── */
 
-/**
- * 관리자가 "바로진행"을 누르면 그 회차의 추첨 시작 시각만 앞당겨진다.
- * 결과 자체는 여전히 회차 시드에서 나오므로 무엇이 나올지는 달라지지 않는다.
- */
-export type Override = { roundId: number; drawAt: number } | null;
-
-/** 추첨이 시작되는 시각 (회차 시작 기준 경과 ms) */
-export function drawStartOf(game: RoundGameId, roundId: number, override?: Override): number {
-  const normal = timingOf(game).betMs;
-  if (game !== "bingo" || !override || override.roundId !== roundId) return normal;
-  return Math.min(normal, Math.max(0, override.drawAt - roundStart(game, roundId)));
-}
-
-/** 결과가 확정되는 시각 (회차 시작 기준 경과 ms) */
-export function settleAtOf(game: RoundGameId, roundId: number, override?: Override): number {
+/** 결과가 확정되는 시각 (회차 시작 기준 경과 ms). 빙고는 일정을 따로 쓴다. */
+export function settleAtOf(game: RoundGameId, roundId: number): number {
   switch (game) {
     case "snail":
       return SNAIL_FINISH_AT;
@@ -82,27 +69,17 @@ export function settleAtOf(game: RoundGameId, roundId: number, override?: Overri
     case "crash":
       return crashAtOf(secretSeedOf("crash", roundId));
     case "bingo":
-      return drawStartOf(game, roundId, override) + BINGO_TIMING.drawMs;
+      return BINGO_TIMING.betMs + BINGO_TIMING.drawMs;
   }
 }
 
-export function isRoundFinished(
-  game: RoundGameId,
-  roundId: number,
-  now: number,
-  override?: Override
-): boolean {
-  return now - roundStart(game, roundId) >= settleAtOf(game, roundId, override);
+export function isRoundFinished(game: RoundGameId, roundId: number, now: number): boolean {
+  return now - roundStart(game, roundId) >= settleAtOf(game, roundId);
 }
 
-export function isBettingOpen(
-  game: RoundGameId,
-  roundId: number,
-  now: number,
-  override?: Override
-): boolean {
+export function isBettingOpen(game: RoundGameId, roundId: number, now: number): boolean {
   const elapsed = now - roundStart(game, roundId);
-  return elapsed >= 0 && elapsed < drawStartOf(game, roundId, override);
+  return elapsed >= 0 && elapsed < timingOf(game).betMs;
 }
 
 /** 게임마다 베팅 전에 공개되는 정보가 다르다. */
@@ -120,7 +97,10 @@ export type PublicRound = {
   commit: string;
   /** 베팅 마감 이후에만 채워진다. 이 값으로 결과를 직접 계산·검증할 수 있다. */
   secretSeed: string | null;
+  /** 구입/베팅이 마감되고 결과 공개가 시작되는 시각 */
   drawAt: number;
+  /** 이 회차가 끝나는 시각 = 다음 회차 시작 */
+  endAt: number;
   data: RoundData;
 };
 
@@ -145,13 +125,8 @@ function roundData(game: RoundGameId, roundId: number): RoundData {
   }
 }
 
-export function publicRound(
-  game: RoundGameId,
-  roundId: number,
-  now: number,
-  override?: Override
-): PublicRound {
-  const revealed = now - roundStart(game, roundId) >= drawStartOf(game, roundId, override);
+export function publicRound(game: RoundGameId, roundId: number, now: number): PublicRound {
+  const revealed = now - roundStart(game, roundId) >= timingOf(game).betMs;
   return {
     game,
     id: roundId,
@@ -159,20 +134,44 @@ export function publicRound(
     publicSeed: publicSeedOf(game, roundId),
     commit: commitOf(game, roundId),
     secretSeed: revealed ? secretSeedOf(game, roundId) : null,
-    /** 관리자가 앞당긴 추첨 시작 시각 (절대 ms). 없으면 null */
-    drawAt: roundStart(game, roundId) + drawStartOf(game, roundId, override),
+    drawAt: roundStart(game, roundId) + timingOf(game).betMs,
+    endAt: roundStart(game, roundId) + timingOf(game).roundMs,
     data: roundData(game, roundId),
   };
 }
 
-export function currentRoundPayload(game: RoundGameId, now: number, override?: Override) {
+export function currentRoundPayload(game: RoundGameId, now: number) {
   const id = roundIdAt(game, now);
   return {
     now,
     game,
     timing: timingOf(game),
-    round: publicRound(game, id, now, override),
-    prev: publicRound(game, id - 1, now, override),
+    round: publicRound(game, id, now),
+    prev: publicRound(game, id - 1, now),
+  };
+}
+
+/** 빙고는 회차가 사슬처럼 이어지므로 일정을 받아서 만든다. */
+export function bingoRoundPayload(sched: BingoSchedule, now: number) {
+  const build = (id: number, startAt: number, drawAt: number, endAt: number): PublicRound => ({
+    game: "bingo",
+    id,
+    start: startAt,
+    publicSeed: publicSeedOf("bingo", id),
+    commit: commitOf("bingo", id),
+    secretSeed: now >= drawAt ? secretSeedOf("bingo", id) : null,
+    drawAt,
+    endAt,
+    data: { game: "bingo", drawCount: DRAW_COUNT, drawMs: BINGO_TIMING.drawMs },
+  });
+
+  return {
+    now,
+    game: "bingo" as const,
+    timing: timingOf("bingo"),
+    round: build(sched.roundId, sched.startAt, sched.drawAt, sched.endAt),
+    // 지난 회차는 이미 끝났으므로 시드가 공개된 상태다.
+    prev: build(sched.roundId - 1, sched.startAt - BINGO_TIMING.roundMs, sched.startAt, sched.startAt),
   };
 }
 

@@ -36,8 +36,10 @@ export default function BingoPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 관리자가 바로진행을 누르면 추첨 시작이 앞당겨진다.
+  // 관리자가 바로진행을 누르면 추첨이 앞당겨지고, 추첨이 끝나는 대로
+  // 회차가 닫히며 바로 다음 구입창이 열린다.
   const drawStart = round ? round.drawAt - round.start : BINGO_TIMING.betMs;
+  const roundLength = round ? round.endAt - round.start : BINGO_TIMING.roundMs;
   const open = elapsed < drawStart;
   const done = elapsed >= drawStart + BINGO_TIMING.drawMs;
 
@@ -63,7 +65,7 @@ export default function BingoPage() {
     open
       ? drawStart - elapsed
       : done
-        ? BINGO_TIMING.roundMs - elapsed
+        ? roundLength - elapsed
         : drawStart + BINGO_TIMING.drawMs - elapsed
   );
 
@@ -171,7 +173,10 @@ export default function BingoPage() {
 
               <div className="bpick-board">
                 {COLUMN_LABELS.map((label, col) => (
-                  <div key={label} className="bpick-col">
+                  <div
+                    key={label}
+                    className={`bpick-col${countByColumn[col] === PICKS_PER_COLUMN[col] ? " is-done" : ""}`}
+                  >
                     <div className="bpick-col-head">
                       <strong>{label}</strong>
                       <small>

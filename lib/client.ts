@@ -19,8 +19,10 @@ export type PublicRound = {
   publicSeed: string;
   commit: string;
   secretSeed: string | null;
-  /** 추첨이 시작되는 절대 시각. 관리자가 앞당기면 이 값이 당겨진다. */
+  /** 구입/베팅 마감 = 결과 공개 시작 (절대 ms) */
   drawAt: number;
+  /** 이 회차가 끝나는 시각 = 다음 회차 시작 (절대 ms) */
+  endAt: number;
   data: RoundData;
 };
 

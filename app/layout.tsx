@@ -8,7 +8,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d1117",
+  width: "device-width",
+  initialScale: 1,
+  // 확대는 막지 않는다 (접근성). 대신 입력 시 자동 확대만 CSS 로 막는다.
+  maximumScale: 5,
+  themeColor: "#080b12",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

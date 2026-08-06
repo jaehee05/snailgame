@@ -4,6 +4,13 @@ import { FieldValue } from "firebase-admin/firestore";
 
 import { hashPassword, newUid, verifyPassword } from "./auth-session";
 import { isValidSelection, oddsFor, payoutOf, type BetKind, type PlacedBet } from "./bets";
+import {
+  BINGO_RESULT_MS,
+  BINGO_TIMING,
+  normalSchedule,
+  settleAtOfSchedule,
+  type BingoSchedule,
+} from "./games/bingo";
 import { drawTriple, TRIPLE_PRICE, type TripleResult } from "./games/triple";
 import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
@@ -18,16 +25,13 @@ import {
 import { isOddEvenSelection, oddEvenHit, oddEvenOdds, oddEvenOutcome } from "./games/oddeven";
 import type { GameId, RoundGameId, Selection } from "./games/types";
 import {
-  type Override,
   crashPointOfRound,
   isBettingOpen,
   isRoundFinished,
-  roundIdAt,
   roundStart,
   settleAtOf,
   snailCore,
   snailOutcome,
-  timingOf,
 } from "./round";
 import { secretSeedOf } from "./seeds";
 
@@ -244,8 +248,12 @@ export async function placeBet(
   autoTarget: number | undefined,
   now: number
 ): Promise<{ bet: PlacedBet; balance: number }> {
-  const override = game === "bingo" ? await bingoOverride(now) : null;
-  if (!isBettingOpen(game, roundId, now, override)) {
+  if (game === "bingo") {
+    const sched = await bingoSchedule(now);
+    if (roundId !== sched.roundId || now >= sched.drawAt) {
+      throw new Error("이번 회차 구입이 마감되었습니다.");
+    }
+  } else if (!isBettingOpen(game, roundId, now)) {
     throw new Error("이번 회차 베팅이 마감되었습니다.");
   }
   if (!Number.isInteger(amount) || amount < MIN_BET || amount > MAX_BET) {
@@ -402,7 +410,9 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   const pending = await userRef.collection("bets").where("settled", "==", false).get();
   if (pending.empty) return [];
 
-  const override = await bingoOverride(now);
+  const sched = await bingoSchedule(now);
+  const bingoFinished = (roundId: number) =>
+    roundId < sched.roundId || now >= settleAtOfSchedule(sched);
 
   // (게임, 회차) 단위로 묶는다
   const groups = new Map<string, { game: RoundGameId; roundId: number; docs: typeof pending.docs }>();
@@ -413,7 +423,9 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
     // 트리플럭은 즉석 정산이라 여기 올 일이 없다.
     if (game === ("triple" as RoundGameId)) continue;
     const { roundId } = data;
-    if (!isRoundFinished(game, roundId, now, override)) continue;
+    const finished =
+      game === "bingo" ? bingoFinished(roundId) : isRoundFinished(game, roundId, now);
+    if (!finished) continue;
     const key = `${game}:${roundId}`;
     const group = groups.get(key) ?? { game, roundId, docs: [] };
     group.docs.push(doc);
@@ -454,7 +466,10 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
         staked,
         returned,
         bets: settledBets,
-        at: roundStart(game, roundId) + settleAtOf(game, roundId, override),
+        at:
+          game === "bingo"
+            ? settleAtOfSchedule(sched)
+            : roundStart(game, roundId) + settleAtOf(game, roundId),
       };
       tx.set(userRef.collection("results").doc(`${game}_${roundId}`), roundResult);
       if (returned > 0) {
@@ -473,56 +488,89 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
 }
 
 
-/* ── 메가빙고 바로진행 ───────────────────────────── */
+/* ── 메가빙고 회차 일정 ───────────────────────────── */
 
-/**
- * 관리자가 8분을 다 기다리지 않고 추첨을 바로 시작시킬 수 있다.
- * 앞당기는 것은 "언제 뽑느냐" 뿐이고, 무엇이 뽑히는지는 회차 시드가 정하므로
- * 결과를 손댈 수는 없다.
+/*
+ * 다른 게임은 회차가 시계 격자 위에서만 돌아가지만, 메가빙고는 관리자가
+ * 추첨을 앞당길 수 있어야 한다. 앞당긴 회차는 8분을 채우지 않고 추첨이
+ * 끝나는 대로 닫히고 바로 다음 회차가 열려야 하므로, 격자 대신 회차를
+ * 사슬처럼 이어 붙인다. 현재 회차의 일정만 control/bingo 에 들고 있으면 된다.
+ *
+ * 앞당기는 것은 "언제 뽑느냐" 뿐이다. 무엇이 뽑히는지는 회차 번호에서 나온
+ * 시드가 정하므로 결과를 손댈 수는 없다.
  */
 const CONTROL_DOC = "bingo";
-let cachedOverride: { at: number; value: Override } | null = null;
+let cachedSchedule: { at: number; value: BingoSchedule } | null = null;
 
-export async function bingoOverride(now: number, fresh = false): Promise<Override> {
-  // /api/round 는 몇 초마다 불리므로 잠깐 캐시한다.
-  if (!fresh && cachedOverride && now - cachedOverride.at < 2_000) return cachedOverride.value;
-  try {
-    const snap = await adminDb().collection("control").doc(CONTROL_DOC).get();
-    const value = snap.exists ? (snap.data() as Override) : null;
-    cachedOverride = { at: now, value };
-    return value;
-  } catch {
-    return cachedOverride?.value ?? null;
-  }
+function advance(s: BingoSchedule, now: number): BingoSchedule {
+  if (now < s.endAt) return s;
+  const { roundMs } = BINGO_TIMING;
+  const skipped = Math.floor((now - s.endAt) / roundMs) + 1;
+  return normalSchedule(s.roundId + skipped, s.endAt + (skipped - 1) * roundMs);
 }
 
-export async function skipBingoDraw(by: UserDoc, now: number): Promise<number> {
+/** 지금 진행 중인 회차. 끝난 회차는 여기서 다음 회차로 넘긴다. */
+export async function bingoSchedule(now: number, fresh = false): Promise<BingoSchedule> {
+  if (!fresh && cachedSchedule && now - cachedSchedule.at < 2_000) {
+    const s = cachedSchedule.value;
+    if (now < s.endAt) return s;
+  }
+
+  const ref = adminDb().collection("control").doc(CONTROL_DOC);
+  const next = await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists
+      ? (snap.data() as BingoSchedule)
+      : // 처음 한 번은 시계 격자에서 시작한다.
+        normalSchedule(
+          Math.floor(now / BINGO_TIMING.roundMs),
+          Math.floor(now / BINGO_TIMING.roundMs) * BINGO_TIMING.roundMs
+        );
+
+    const moved = advance(current, now);
+    if (!snap.exists || moved.roundId !== current.roundId) tx.set(ref, moved);
+    return moved;
+  });
+
+  cachedSchedule = { at: now, value: next };
+  return next;
+}
+
+export async function skipBingoDraw(by: UserDoc, now: number): Promise<BingoSchedule> {
   if (!by.isAdmin) throw new Error("권한이 없습니다.");
 
-  const roundId = roundIdAt("bingo", now);
-  const normalDrawAt = roundStart("bingo", roundId) + timingOf("bingo").betMs;
+  const ref = adminDb().collection("control").doc(CONTROL_DOC);
+  const updated = await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const current = advance(
+      snap.exists
+        ? (snap.data() as BingoSchedule)
+        : normalSchedule(
+            Math.floor(now / BINGO_TIMING.roundMs),
+            Math.floor(now / BINGO_TIMING.roundMs) * BINGO_TIMING.roundMs
+          ),
+      now
+    );
 
-  // 이미 앞당겨 둔 게 있으면 그 시각이 기준이다. 두 번 눌러서 추첨이
-  // 뒤로 밀리는 일이 없어야 한다.
-  const existing = await bingoOverride(now, true);
-  const currentDrawAt =
-    existing && existing.roundId === roundId
-      ? Math.min(normalDrawAt, existing.drawAt)
-      : normalDrawAt;
+    // 화면들이 따라올 시간을 조금 준다.
+    const drawAt = now + 3_000;
+    if (drawAt >= current.drawAt) throw new Error("이미 추첨이 시작되었습니다.");
 
-  // 화면들이 따라올 시간을 조금 준다.
-  const drawAt = now + 3_000;
-  if (drawAt >= currentDrawAt) throw new Error("이미 추첨이 시작되었습니다.");
+    // 추첨이 끝나면 결과를 잠깐 보여주고 바로 다음 회차가 열린다.
+    const moved: BingoSchedule = {
+      ...current,
+      drawAt,
+      endAt: drawAt + BINGO_TIMING.drawMs + BINGO_RESULT_MS,
+    };
+    tx.set(ref, moved);
+    return moved;
+  });
 
-  await adminDb()
-    .collection("control")
-    .doc(CONTROL_DOC)
-    .set({ roundId, drawAt, byNick: by.nick, at: now });
-  cachedOverride = { at: now, value: { roundId, drawAt } };
-  return drawAt;
+  cachedSchedule = { at: now, value: updated };
+  return updated;
 }
 
-/* ── 트리플럭 (즉석복권) ─────────────────────────── */
+/* ── 트리플럭 (즉석복권) ─/* ── 트리플럭 (즉석복권) ─────────────────────────── */
 
 export type ScratchTicket = {
   id: string;
