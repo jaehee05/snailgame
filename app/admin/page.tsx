@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, formatCoins, RequestError } from "@/lib/client";
 
@@ -24,7 +24,14 @@ type LedgerEntry = {
   at: number;
 };
 
-const PRESETS = [1_000, 5_000, 10_000, 50_000];
+const PRESETS = [10_000, 100_000, 1_000_000, 10_000_000];
+
+function presetLabel(n: number): string {
+  if (n >= 10_000_000) return "+1천만";
+  if (n >= 1_000_000) return "+100만";
+  if (n >= 100_000) return "+10만";
+  return "+1만";
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -34,6 +41,7 @@ export default function AdminPage() {
   const [memo, setMemo] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -54,6 +62,12 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
     load();
   }, [load]);
+
+  const shown = useMemo(
+    () => users.filter((u) => u.nick.toLowerCase().includes(query.trim().toLowerCase())),
+    [users, query]
+  );
+  const totalCoins = useMemo(() => users.reduce((s, u) => s + u.balance, 0), [users]);
 
   async function send(uid: string, body: Record<string, unknown>) {
     setBusy(uid);
@@ -94,148 +108,167 @@ export default function AdminPage() {
       </header>
 
       <div className="shell-body">
-      <main className="layout admin-layout">
-        {error && <p className="error">{error}</p>}
+        <main className="admin-main">
+          {error && <p className="error">{error}</p>}
 
-        <div className="panel">
-          <div className="panel-title">
-            <h2>참가자 {users.length}명</h2>
-            <input
-              className="memo-input"
-              placeholder="지급 사유 (선택)"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-            />
+          <div className="stat-row">
+            <div className="stat">
+              <small>참가자</small>
+              <strong>{users.length}명</strong>
+            </div>
+            <div className="stat">
+              <small>전체 보유 코인</small>
+              <strong className="accent">{formatCoins(totalCoins)}</strong>
+            </div>
           </div>
 
-          <div className="table-wrap">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>아이디</th>
-                  <th className="num">보유</th>
-                  <th className="num">누적 베팅</th>
-                  <th className="num">누적 회수</th>
-                  <th>지급 / 회수</th>
-                  <th>권한</th>
-                  <th>비밀번호</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => {
-                  const amount = amounts[u.uid] ?? 0;
-                  return (
-                    <tr key={u.uid}>
-                      <td>
+          <div className="panel">
+            <div className="panel-title">
+              <h2>코인 지급</h2>
+              <span className="badge badge-muted">{shown.length}명</span>
+            </div>
+
+            <div className="admin-filters">
+              <input
+                placeholder="아이디 검색"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <input
+                placeholder="지급 사유 (선택)"
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+              />
+            </div>
+
+            <div className="user-cards">
+              {shown.map((u) => {
+                const amount = amounts[u.uid] ?? 0;
+                const working = busy === u.uid;
+                return (
+                  <div key={u.uid} className="user-card">
+                    <div className="user-head">
+                      <span className="user-avatar">{u.nick.slice(0, 1)}</span>
+                      <div className="user-id">
                         <strong>{u.nick}</strong>
-                      </td>
-                      <td className="num">{formatCoins(u.balance)}</td>
-                      <td className="num muted">{formatCoins(u.staked ?? 0)}</td>
-                      <td className="num muted">{formatCoins(u.returned ?? 0)}</td>
-                      <td>
-                        <div className="grant-row">
-                          {PRESETS.map((p) => (
-                            <button
-                              key={p}
-                              type="button"
-                              className="chip"
-                              onClick={() =>
-                                setAmounts((a) => ({ ...a, [u.uid]: (a[u.uid] ?? 0) + p }))
-                              }
-                            >
-                              +{p / 1000}k
-                            </button>
-                          ))}
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="금액"
-                            value={amount ? amount.toLocaleString("ko-KR") : ""}
-                            onChange={(e) =>
-                              setAmounts((a) => ({
-                                ...a,
-                                [u.uid]: Number(e.target.value.replace(/[^0-9]/g, "")) || 0,
-                              }))
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="primary small-btn"
-                            disabled={busy === u.uid || !amount}
-                            onClick={() => grant(u.uid, amount)}
-                          >
-                            지급
-                          </button>
-                          <button
-                            type="button"
-                            className="chip chip-ghost"
-                            disabled={busy === u.uid || !amount}
-                            onClick={() => grant(u.uid, -Math.abs(amount))}
-                          >
-                            회수
-                          </button>
-                        </div>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className={u.isAdmin ? "chip is-admin" : "chip"}
-                          disabled={busy === u.uid}
-                          onClick={() => send(u.uid, { action: "setAdmin", isAdmin: !u.isAdmin })}
-                        >
-                          {u.isAdmin ? "관리자" : "일반"}
-                        </button>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="chip chip-ghost"
-                          disabled={busy === u.uid}
-                          onClick={() => resetPassword(u)}
-                        >
-                          초기화
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                        <small className="muted">
+                          베팅 {formatCoins(u.staked ?? 0)} · 회수 {formatCoins(u.returned ?? 0)}
+                        </small>
+                      </div>
+                      <span className="user-balance">{formatCoins(u.balance)}</span>
+                    </div>
 
-        <div className="panel">
-          <div className="panel-title">
-            <h2>지급 내역</h2>
+                    <div className="amount-row">
+                      {PRESETS.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          className="chip"
+                          onClick={() =>
+                            setAmounts((a) => ({ ...a, [u.uid]: (a[u.uid] ?? 0) + p }))
+                          }
+                        >
+                          {presetLabel(p)}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="chip chip-ghost"
+                        onClick={() => setAmounts((a) => ({ ...a, [u.uid]: 0 }))}
+                      >
+                        초기화
+                      </button>
+                    </div>
+
+                    <div className="grant-row">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="금액 입력"
+                        value={amount ? amount.toLocaleString("ko-KR") : ""}
+                        onChange={(e) =>
+                          setAmounts((a) => ({
+                            ...a,
+                            [u.uid]: Number(e.target.value.replace(/[^0-9]/g, "")) || 0,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="primary small-btn"
+                        disabled={working || !amount}
+                        onClick={() => grant(u.uid, amount)}
+                      >
+                        지급
+                      </button>
+                      <button
+                        type="button"
+                        className="chip chip-ghost"
+                        disabled={working || !amount}
+                        onClick={() => grant(u.uid, -Math.abs(amount))}
+                      >
+                        회수
+                      </button>
+                    </div>
+
+                    <div className="user-foot">
+                      <button
+                        type="button"
+                        className={u.isAdmin ? "chip is-admin" : "chip"}
+                        disabled={working}
+                        onClick={() => send(u.uid, { action: "setAdmin", isAdmin: !u.isAdmin })}
+                      >
+                        {u.isAdmin ? "관리자" : "일반"}
+                      </button>
+                      <button
+                        type="button"
+                        className="chip chip-ghost"
+                        disabled={working}
+                        onClick={() => resetPassword(u)}
+                      >
+                        비밀번호 초기화
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {shown.length === 0 && <p className="muted small">해당하는 참가자가 없습니다.</p>}
+            </div>
           </div>
-          {ledger.length === 0 ? (
-            <p className="muted small">아직 내역이 없습니다.</p>
-          ) : (
-            <ul className="history">
-              {ledger.map((entry, i) => (
-                <li key={i}>
-                  <span className="muted small">
-                    {new Date(entry.at).toLocaleString("ko-KR", {
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                  <span>
-                    {entry.byNick} → <strong>{entry.toNick}</strong>
-                    {entry.memo ? ` · ${entry.memo}` : ""}
-                  </span>
-                  <span className={entry.amount >= 0 ? "net-up" : "net-down"}>
-                    {entry.amount >= 0 ? "+" : ""}
-                    {formatCoins(entry.amount)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </main>
+
+          <div className="panel">
+            <div className="panel-title">
+              <h2>지급 내역</h2>
+              {ledger.length > 0 && <span className="badge badge-muted">{ledger.length}건</span>}
+            </div>
+            {ledger.length === 0 ? (
+              <p className="muted small">아직 내역이 없습니다.</p>
+            ) : (
+              <ul className="history">
+                {ledger.map((entry, i) => (
+                  <li key={i}>
+                    <span className="muted small">
+                      {new Date(entry.at).toLocaleString("ko-KR", {
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    <span className="history-order">
+                      {entry.byNick} → <strong>{entry.toNick}</strong>
+                      {entry.memo ? ` · ${entry.memo}` : ""}
+                    </span>
+                    <span className={entry.amount >= 0 ? "net-up" : "net-down"}>
+                      {entry.amount >= 0 ? "+" : ""}
+                      {formatCoins(entry.amount)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );
