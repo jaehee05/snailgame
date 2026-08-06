@@ -8,6 +8,7 @@ import { RoundHeader } from "@/components/RoundHeader";
 import { BetPanel } from "@/components/BetPanel";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
+import { GameSkeleton } from "@/components/Skeleton";
 import { Track } from "@/components/Track";
 import type { BetKind } from "@/lib/bets";
 import { api, useMe, useRound } from "@/lib/client";
@@ -85,9 +86,9 @@ export default function SnailPage() {
     [round, loadMe]
   );
 
-  if (fatal) return <main className="center-screen">{fatal}</main>;
+  if (fatal) return <GameSkeleton message={fatal} />;
   if (!round || round.data.game !== "snail" || !me) {
-    return <main className="center-screen">{roundError ?? "불러오는 중…"}</main>;
+    return <GameSkeleton message={roundError ?? undefined} />;
   }
 
   const data = round.data;

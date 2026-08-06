@@ -7,6 +7,7 @@ import { History } from "@/components/BetList";
 import { BingoCard } from "@/components/BingoCard";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
+import { GameSkeleton } from "@/components/Skeleton";
 import { RoundHeader } from "@/components/RoundHeader";
 import { api, formatCoins, useMe, useRound } from "@/lib/client";
 import {
@@ -134,9 +135,9 @@ export default function BingoPage() {
     }
   }
 
-  if (fatal) return <main className="center-screen">{fatal}</main>;
+  if (fatal) return <GameSkeleton message={fatal} />;
   if (!round || round.data.game !== "bingo" || !me) {
-    return <main className="center-screen">{roundError ?? "불러오는 중…"}</main>;
+    return <GameSkeleton message={roundError ?? undefined} />;
   }
 
   return (

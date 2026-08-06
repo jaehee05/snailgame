@@ -36,7 +36,7 @@ export default function LoginPage() {
         <div className="auth-brand">
           <span>🎰</span>
           <h1>미니게임</h1>
-          <p className="muted small">달팽이 레이싱 · 홀짝 · 그래프</p>
+          <p className="muted small">달팽이게임 · 홀짝 · 그래프 · 빙고 · 즉석복권</p>
         </div>
 
         <div className="auth-tabs">

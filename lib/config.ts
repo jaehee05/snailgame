@@ -21,6 +21,6 @@ export const MC_RUNS = 900;
 /** 신규 가입 시 지급되는 가상 코인 */
 export const START_BALANCE = 10_000;
 export const MIN_BET = 100;
-export const MAX_BET = 1_000_000;
+export const MAX_BET = 100_000_000;
 
 export type Phase = "betting" | "racing" | "result";

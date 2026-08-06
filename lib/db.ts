@@ -14,7 +14,14 @@ import {
 import { drawTriple, TRIPLE_PRICE, type TripleResult } from "./games/triple";
 import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
-import { bestRank, drawBalls, isValidPicks, prizeOf, TICKET_PRICE } from "./games/bingo";
+import {
+  bestRank,
+  drawBalls,
+  isValidPicks,
+  MAX_TICKETS as BINGO_MAX_TICKETS,
+  prizeOf,
+  TICKET_PRICE,
+} from "./games/bingo";
 import {
   CRASH_TIMING,
   crashSettle,
@@ -265,7 +272,7 @@ export async function placeBet(
     throw new Error("자동 인출 배수가 올바르지 않습니다.");
   }
   if (game === "bingo" && amount !== TICKET_PRICE) {
-    throw new Error(`메가빙고는 한 장에 ${TICKET_PRICE.toLocaleString()} 코인입니다.`);
+    throw new Error(`빙고는 한 장에 ${TICKET_PRICE.toLocaleString()} 코인입니다.`);
   }
 
   const { odds } = validateAndPrice(game, roundId, sel);
@@ -300,6 +307,9 @@ export async function placeBet(
     // 그래프는 회차당 한 판만 태울 수 있게 한다 (인출 판정이 단순해진다)
     if (game === "crash" && existing.size >= 1) {
       throw new Error("그래프는 회차당 한 번만 베팅할 수 있습니다.");
+    }
+    if (game === "bingo" && existing.size >= BINGO_MAX_TICKETS) {
+      throw new Error(`한 회차에 최대 ${BINGO_MAX_TICKETS}장까지 살 수 있습니다.`);
     }
 
     tx.set(betRef, { ...bet, settled: false, createdAt: now });
@@ -420,7 +430,7 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
     const data = doc.data() as PlacedBet;
     // 게임이 하나뿐이던 시절의 베팅에는 game 필드가 없다.
     const game = (data.game ?? "snail") as RoundGameId;
-    // 트리플럭은 즉석 정산이라 여기 올 일이 없다.
+    // 즉석복권은 즉석 정산이라 여기 올 일이 없다.
     if (game === ("triple" as RoundGameId)) continue;
     const { roundId } = data;
     const finished =
@@ -488,10 +498,10 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
 }
 
 
-/* ── 메가빙고 회차 일정 ───────────────────────────── */
+/* ── 빙고 회차 일정 ───────────────────────────── */
 
 /*
- * 다른 게임은 회차가 시계 격자 위에서만 돌아가지만, 메가빙고는 관리자가
+ * 다른 게임은 회차가 시계 격자 위에서만 돌아가지만, 빙고는 관리자가
  * 추첨을 앞당길 수 있어야 한다. 앞당긴 회차는 8분을 채우지 않고 추첨이
  * 끝나는 대로 닫히고 바로 다음 회차가 열려야 하므로, 격자 대신 회차를
  * 사슬처럼 이어 붙인다. 현재 회차의 일정만 control/bingo 에 들고 있으면 된다.
@@ -570,7 +580,7 @@ export async function skipBingoDraw(by: UserDoc, now: number): Promise<BingoSche
   return updated;
 }
 
-/* ── 트리플럭 (즉석복권) ─/* ── 트리플럭 (즉석복권) ─────────────────────────── */
+/* ── 즉석복권 (즉석복권) ─/* ── 즉석복권 (즉석복권) ─────────────────────────── */
 
 export type ScratchTicket = {
   id: string;

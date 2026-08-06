@@ -6,11 +6,11 @@ export function isGameId(value: unknown): value is GameId {
 }
 
 export const GAME_LABEL: Record<GameId, string> = {
-  snail: "달팽이 레이싱",
+  snail: "달팽이게임",
   oddeven: "홀짝",
   crash: "그래프",
-  bingo: "메가빙고",
-  triple: "트리플럭",
+  bingo: "빙고",
+  triple: "즉석복권",
 };
 
 export const GAME_ICON: Record<GameId, string> = {
@@ -26,11 +26,11 @@ export const GAME_TAGLINE: Record<GameId, string> = {
   oddeven: "1~100 추첨, 홀짝과 대소",
   crash: "터지기 전에 인출한다",
   bingo: "24개를 골라 패턴을 맞춘다",
-  triple: "긁어서 바로 확인하는 즉석복권",
+  triple: "긁어서 바로 확인",
 };
 
 /**
- * 회차가 돌아가는 게임들. 트리플럭은 즉석복권이라 회차가 없다.
+ * 회차가 돌아가는 게임들. 즉석복권은 즉석복권이라 회차가 없다.
  */
 export type RoundGameId = Exclude<GameId, "triple">;
 

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { GameShell } from "@/components/GameShell";
+import { ScratchCell } from "@/components/ScratchCell";
+import { GameSkeleton } from "@/components/Skeleton";
 import { api, formatCoins, RequestError, type MeState } from "@/lib/client";
 import {
   BONUS_ODDS,
@@ -15,7 +17,13 @@ import {
 
 type Ticket = { id: string; seed: string; result: TripleResult; balance: number; at: number };
 
-const PANEL_LABEL = ["게임 1 · 5억 기회", "게임 2 · 1억 기회", "게임 3 · 보너스"];
+const PANEL_LABEL = ["게임 1 · 50억 기회", "게임 2 · 10억 기회", "게임 3 · 보너스"];
+
+const blank = (): boolean[][] => [
+  [false, false, false],
+  [false, false, false],
+  [false, false, false],
+];
 
 export default function TriplePage() {
   const router = useRouter();
@@ -23,7 +31,8 @@ export default function TriplePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [revealed, setRevealed] = useState<boolean[]>([false, false, false]);
+  // 9칸을 하나씩 긁는다. revealed[게임][칸]
+  const [revealed, setRevealed] = useState<boolean[][]>(() => blank());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<{ label: string; prize: number }[]>([]);
@@ -46,7 +55,7 @@ export default function TriplePage() {
     loadMe();
   }, [loadMe]);
 
-  const allRevealed = revealed.every(Boolean);
+  const allRevealed = revealed.every((row) => row.every(Boolean));
 
   async function buy() {
     if (busy) return;
@@ -56,7 +65,7 @@ export default function TriplePage() {
     try {
       const t = await api<Ticket>("/api/scratch", { method: "POST" });
       setTicket(t);
-      setRevealed([false, false, false]);
+      setRevealed(blank());
       setMe((prev) => (prev ? { ...prev, user: { ...prev.user, balance: t.balance } } : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : "구입에 실패했습니다.");
@@ -65,19 +74,23 @@ export default function TriplePage() {
     }
   }
 
-  function reveal(i: number) {
+  function reveal(panel: number, cell: number) {
     setRevealed((prev) => {
-      if (prev[i]) return prev;
-      const next = [...prev];
-      next[i] = true;
-      if (next.every(Boolean) && ticket) finish(ticket);
+      if (prev[panel][cell]) return prev;
+      const next = prev.map((row) => [...row]);
+      next[panel][cell] = true;
+      if (next.every((row) => row.every(Boolean)) && ticket) finish(ticket);
       return next;
     });
   }
 
   function revealAll() {
     if (!ticket) return;
-    setRevealed([true, true, true]);
+    setRevealed([
+      [true, true, true],
+      [true, true, true],
+      [true, true, true],
+    ]);
     finish(ticket);
   }
 
@@ -92,8 +105,8 @@ export default function TriplePage() {
     if (t.result.prize > 0) setNotice(`${label} 당첨 · +${formatCoins(t.result.prize)} 코인`);
   }
 
-  if (fatal) return <main className="center-screen">{fatal}</main>;
-  if (!me) return <main className="center-screen">불러오는 중…</main>;
+  if (fatal) return <GameSkeleton message={fatal} />;
+  if (!me) return <GameSkeleton />;
 
   return (
     <GameShell me={me} notice={notice} onDismissNotice={() => setNotice(null)}>
@@ -118,28 +131,26 @@ export default function TriplePage() {
           ) : (
             <>
               <div className="tl-panels">
-                {ticket.result.panels.map((symbols, i) => (
-                  <div key={i} className="tl-panel">
-                    <small className="tl-panel-label">{PANEL_LABEL[i]}</small>
-                    <button
-                      type="button"
-                      className={`tl-scratch${revealed[i] ? " is-open" : ""}${
-                        revealed[i] && ticket.result.winPanel === i ? " is-win" : ""
-                      }`}
-                      onClick={() => reveal(i)}
-                    >
-                      {revealed[i] ? (
-                        <span className="tl-symbols">
-                          {symbols.map((s, j) => (
-                            <span key={j}>{s}</span>
-                          ))}
-                        </span>
-                      ) : (
-                        <span className="tl-cover">긁기</span>
-                      )}
-                    </button>
-                  </div>
-                ))}
+                {ticket.result.panels.map((symbols, i) => {
+                  const open = revealed[i].every(Boolean);
+                  const win = open && ticket.result.winPanel === i;
+                  return (
+                    <div key={i} className={`tl-panel${win ? " is-win" : ""}`}>
+                      <small className="tl-panel-label">{PANEL_LABEL[i]}</small>
+                      <div className="tl-cells">
+                        {symbols.map((sym, j) => (
+                          <ScratchCell
+                            key={j}
+                            symbol={sym}
+                            revealed={revealed[i][j]}
+                            win={win}
+                            onReveal={() => reveal(i, j)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="tl-actions">
@@ -170,7 +181,13 @@ export default function TriplePage() {
                 )}
               </div>
 
-              <p className="muted small mono tl-seed">시드 {ticket.seed.slice(0, 16)}…</p>
+              <p className="muted small tl-hint">
+                {allRevealed ? (
+                  <span className="mono">시드 {ticket.seed.slice(0, 16)}…</span>
+                ) : (
+                  "은박을 손가락으로 문질러 긁으세요"
+                )}
+              </p>
             </>
           )}
         </section>

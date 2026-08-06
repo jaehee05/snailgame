@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { BetAmount } from "@/components/BetAmount";
 import { History } from "@/components/BetList";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
+import { GameSkeleton } from "@/components/Skeleton";
 import { RoundHeader } from "@/components/RoundHeader";
 import { api, formatClock, formatCoins, formatMult, useMe, useRound } from "@/lib/client";
 import { MIN_BET } from "@/lib/config";
@@ -18,7 +20,6 @@ import {
   timeOfMult,
 } from "@/lib/games/crash";
 
-const CHIPS = [500, 1_000, 5_000, 10_000];
 const AUTO_PRESETS = [1.3, 1.5, 2, 3, 5];
 
 export default function CrashPage() {
@@ -123,8 +124,8 @@ export default function CrashPage() {
     }
   }
 
-  if (fatal) return <main className="center-screen">{fatal}</main>;
-  if (!round || !me) return <main className="center-screen">{roundError ?? "불러오는 중…"}</main>;
+  if (fatal) return <GameSkeleton message={fatal} />;
+  if (!round || !me) return <GameSkeleton message={roundError ?? undefined} />;
 
   return (
     <GameShell me={me} notice={notice} onDismissNotice={() => setNotice(null)}>
@@ -213,39 +214,12 @@ export default function CrashPage() {
               </div>
             ) : (
               <>
-                <div className="amount-row">
-                  {CHIPS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className="chip"
-                      disabled={!open}
-                      onClick={() => setAmount((a) => Math.min(me.user.balance, a + c))}
-                    >
-                      +{formatCoins(c)}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="chip chip-ghost"
-                    disabled={!open}
-                    onClick={() => setAmount(MIN_BET)}
-                  >
-                    초기화
-                  </button>
-                </div>
-
-                <label className="amount-input">
-                  <span>베팅 금액</span>
-                  <input
-                    type="number"
-                    min={MIN_BET}
-                    step={100}
-                    value={amount}
-                    disabled={!open}
-                    onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                  />
-                </label>
+                <BetAmount
+                  amount={amount}
+                  setAmount={setAmount}
+                  balance={me.user.balance}
+                  disabled={!open}
+                />
 
                 <label className="auto-toggle">
                   <input

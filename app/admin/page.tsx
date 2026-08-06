@@ -80,20 +80,20 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">🛠️</span>
-          <div>
+    <div className="shell">
+      <header className="appbar">
+        <div className="appbar-inner">
+          <div className="brand">
+            <span className="brand-mark">🛠️</span>
             <strong>관리자</strong>
-            <small>게임 머니 지급 · 회수</small>
           </div>
-        </div>
-        <div className="topbar-right">
-          <Link href="/">경주장으로</Link>
+          <Link href="/" className="chip">
+            게임으로
+          </Link>
         </div>
       </header>
 
+      <div className="shell-body">
       <main className="layout admin-layout">
         {error && <p className="error">{error}</p>}
 
@@ -147,12 +147,14 @@ export default function AdminPage() {
                             </button>
                           ))}
                           <input
-                            type="number"
-                            value={amount}
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="금액"
+                            value={amount ? amount.toLocaleString("ko-KR") : ""}
                             onChange={(e) =>
                               setAmounts((a) => ({
                                 ...a,
-                                [u.uid]: Math.floor(Number(e.target.value) || 0),
+                                [u.uid]: Number(e.target.value.replace(/[^0-9]/g, "")) || 0,
                               }))
                             }
                           />
@@ -234,6 +236,7 @@ export default function AdminPage() {
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 }

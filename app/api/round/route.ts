@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   }
 
   const now = Date.now();
-  // 메가빙고만 회차가 사슬처럼 이어진다 (관리자가 추첨을 앞당길 수 있어서).
+  // 빙고만 회차가 사슬처럼 이어진다 (관리자가 추첨을 앞당길 수 있어서).
   const payload =
     raw === "bingo"
       ? bingoRoundPayload(await bingoSchedule(now), now)

@@ -3,7 +3,7 @@ import { buyScratch } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-/** 트리플럭 한 장 구입. 회차가 없어서 사는 즉시 결과가 나온다. */
+/** 즉석복권 한 장 구입. 회차가 없어서 사는 즉시 결과가 나온다. */
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);

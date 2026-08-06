@@ -7,6 +7,7 @@ import { BetAmount } from "@/components/BetAmount";
 import { History, MyOddEvenBets } from "@/components/BetList";
 import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
+import { GameSkeleton } from "@/components/Skeleton";
 import { RoundHeader } from "@/components/RoundHeader";
 import { api, formatCoins, useMe, useRound } from "@/lib/client";
 import { MIN_BET } from "@/lib/config";
@@ -84,8 +85,8 @@ export default function OddEvenPage() {
     }
   }
 
-  if (fatal) return <main className="center-screen">{fatal}</main>;
-  if (!round || !me) return <main className="center-screen">{roundError ?? "불러오는 중…"}</main>;
+  if (fatal) return <GameSkeleton message={fatal} />;
+  if (!round || !me) return <GameSkeleton message={roundError ?? undefined} />;
 
   const open = phase === "betting";
   const settled = phase === "result" && drawn;

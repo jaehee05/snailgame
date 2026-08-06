@@ -1,11 +1,20 @@
 "use client";
 
 import { formatCoins } from "@/lib/client";
-import { MIN_BET } from "@/lib/config";
+import { MAX_BET, MIN_BET } from "@/lib/config";
 
-const CHIPS = [100, 500, 1_000, 5_000, 10_000];
+const CHIPS = [1_000, 10_000, 100_000, 1_000_000];
 
-/** 금액 칩 · 직접 입력 · 적중 시 수령액 미리보기. 게임마다 똑같이 쓰인다. */
+function chipLabel(n: number): string {
+  if (n >= 10_000) return `${n / 10_000}만`;
+  return `${n / 1_000}천`;
+}
+
+/**
+ * 금액 칩 · 직접 입력 · 적중 시 수령액 미리보기.
+ * 입력칸은 숫자 타입 대신 글자 타입이다. 숫자 타입은 값이 0 일 때
+ * "0" 이 남아 있어서 100만을 치면 0100000 이 되어 버린다.
+ */
 export function BetAmount({
   amount,
   setAmount,
@@ -20,6 +29,8 @@ export function BetAmount({
   /** 배당이 정해진 게임만 수령액을 보여준다 */
   odds?: number;
 }) {
+  const clamp = (n: number) => Math.max(0, Math.min(MAX_BET, Math.floor(n)));
+
   return (
     <div className="bet-amount-block">
       <div className="amount-row">
@@ -29,40 +40,63 @@ export function BetAmount({
             type="button"
             className="chip"
             disabled={disabled}
-            onClick={() => setAmount(Math.min(balance, amount + c))}
+            onClick={() => setAmount(clamp(amount + c))}
           >
-            +{c >= 1000 ? `${c / 1000}천` : c}
+            +{chipLabel(c)}
           </button>
         ))}
         <button
           type="button"
           className="chip chip-ghost"
           disabled={disabled}
-          onClick={() => setAmount(MIN_BET)}
+          onClick={() => setAmount(0)}
         >
           초기화
         </button>
       </div>
 
-      <label className="amount-input">
-        <span>금액</span>
+      <div className="amount-input">
         <input
-          type="number"
-          min={MIN_BET}
-          step={100}
-          value={amount}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="금액 입력"
+          value={amount ? amount.toLocaleString("ko-KR") : ""}
           disabled={disabled}
-          onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+          onChange={(e) => setAmount(clamp(Number(e.target.value.replace(/[^0-9]/g, "")) || 0))}
         />
+        <span className="amount-unit">코인</span>
+      </div>
+
+      <div className="amount-row amount-quick">
         <button
           type="button"
           className="chip"
           disabled={disabled}
-          onClick={() => setAmount(balance)}
+          onClick={() => setAmount(clamp(Math.floor(amount / 2)))}
+        >
+          ½
+        </button>
+        <button
+          type="button"
+          className="chip"
+          disabled={disabled}
+          onClick={() => setAmount(clamp(amount * 2))}
+        >
+          ×2
+        </button>
+        <button
+          type="button"
+          className="chip"
+          disabled={disabled}
+          onClick={() => setAmount(clamp(balance))}
         >
           올인
         </button>
-      </label>
+        <span className="amount-limit muted">
+          {formatCoins(MIN_BET)} ~ {formatCoins(MAX_BET)}
+        </span>
+      </div>
 
       {odds !== undefined && (
         <div className="payout-preview">
