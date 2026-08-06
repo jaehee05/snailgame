@@ -19,6 +19,8 @@ export type PublicRound = {
   publicSeed: string;
   commit: string;
   secretSeed: string | null;
+  /** 추첨이 시작되는 절대 시각. 관리자가 앞당기면 이 값이 당겨진다. */
+  drawAt: number;
   data: RoundData;
 };
 

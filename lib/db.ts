@@ -18,13 +18,16 @@ import {
 import { isOddEvenSelection, oddEvenHit, oddEvenOdds, oddEvenOutcome } from "./games/oddeven";
 import type { GameId, RoundGameId, Selection } from "./games/types";
 import {
+  type Override,
   crashPointOfRound,
   isBettingOpen,
   isRoundFinished,
+  roundIdAt,
   roundStart,
   settleAtOf,
   snailCore,
   snailOutcome,
+  timingOf,
 } from "./round";
 import { secretSeedOf } from "./seeds";
 
@@ -241,7 +244,10 @@ export async function placeBet(
   autoTarget: number | undefined,
   now: number
 ): Promise<{ bet: PlacedBet; balance: number }> {
-  if (!isBettingOpen(game, roundId, now)) throw new Error("이번 회차 베팅이 마감되었습니다.");
+  const override = game === "bingo" ? await bingoOverride(now) : null;
+  if (!isBettingOpen(game, roundId, now, override)) {
+    throw new Error("이번 회차 베팅이 마감되었습니다.");
+  }
   if (!Number.isInteger(amount) || amount < MIN_BET || amount > MAX_BET) {
     throw new Error(
       `베팅 금액은 ${MIN_BET.toLocaleString()} ~ ${MAX_BET.toLocaleString()} 코인 사이여야 합니다.`
@@ -396,6 +402,8 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   const pending = await userRef.collection("bets").where("settled", "==", false).get();
   if (pending.empty) return [];
 
+  const override = await bingoOverride(now);
+
   // (게임, 회차) 단위로 묶는다
   const groups = new Map<string, { game: RoundGameId; roundId: number; docs: typeof pending.docs }>();
   for (const doc of pending.docs) {
@@ -405,7 +413,7 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
     // 트리플럭은 즉석 정산이라 여기 올 일이 없다.
     if (game === ("triple" as RoundGameId)) continue;
     const { roundId } = data;
-    if (!isRoundFinished(game, roundId, now)) continue;
+    if (!isRoundFinished(game, roundId, now, override)) continue;
     const key = `${game}:${roundId}`;
     const group = groups.get(key) ?? { game, roundId, docs: [] };
     group.docs.push(doc);
@@ -446,7 +454,7 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
         staked,
         returned,
         bets: settledBets,
-        at: roundStart(game, roundId) + settleAtOf(game, roundId),
+        at: roundStart(game, roundId) + settleAtOf(game, roundId, override),
       };
       tx.set(userRef.collection("results").doc(`${game}_${roundId}`), roundResult);
       if (returned > 0) {
@@ -464,6 +472,55 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   return results;
 }
 
+
+/* ── 메가빙고 바로진행 ───────────────────────────── */
+
+/**
+ * 관리자가 8분을 다 기다리지 않고 추첨을 바로 시작시킬 수 있다.
+ * 앞당기는 것은 "언제 뽑느냐" 뿐이고, 무엇이 뽑히는지는 회차 시드가 정하므로
+ * 결과를 손댈 수는 없다.
+ */
+const CONTROL_DOC = "bingo";
+let cachedOverride: { at: number; value: Override } | null = null;
+
+export async function bingoOverride(now: number, fresh = false): Promise<Override> {
+  // /api/round 는 몇 초마다 불리므로 잠깐 캐시한다.
+  if (!fresh && cachedOverride && now - cachedOverride.at < 2_000) return cachedOverride.value;
+  try {
+    const snap = await adminDb().collection("control").doc(CONTROL_DOC).get();
+    const value = snap.exists ? (snap.data() as Override) : null;
+    cachedOverride = { at: now, value };
+    return value;
+  } catch {
+    return cachedOverride?.value ?? null;
+  }
+}
+
+export async function skipBingoDraw(by: UserDoc, now: number): Promise<number> {
+  if (!by.isAdmin) throw new Error("권한이 없습니다.");
+
+  const roundId = roundIdAt("bingo", now);
+  const normalDrawAt = roundStart("bingo", roundId) + timingOf("bingo").betMs;
+
+  // 이미 앞당겨 둔 게 있으면 그 시각이 기준이다. 두 번 눌러서 추첨이
+  // 뒤로 밀리는 일이 없어야 한다.
+  const existing = await bingoOverride(now, true);
+  const currentDrawAt =
+    existing && existing.roundId === roundId
+      ? Math.min(normalDrawAt, existing.drawAt)
+      : normalDrawAt;
+
+  // 화면들이 따라올 시간을 조금 준다.
+  const drawAt = now + 3_000;
+  if (drawAt >= currentDrawAt) throw new Error("이미 추첨이 시작되었습니다.");
+
+  await adminDb()
+    .collection("control")
+    .doc(CONTROL_DOC)
+    .set({ roundId, drawAt, byNick: by.nick, at: now });
+  cachedOverride = { at: now, value: { roundId, drawAt } };
+  return drawAt;
+}
 
 /* ── 트리플럭 (즉석복권) ─────────────────────────── */
 

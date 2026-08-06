@@ -1,3 +1,4 @@
+import { bingoOverride } from "@/lib/db";
 import { isRoundGameId } from "@/lib/games/types";
 import { currentRoundPayload } from "@/lib/round";
 
@@ -10,7 +11,11 @@ export async function GET(req: Request) {
     return Response.json({ error: "회차가 없는 게임입니다." }, { status: 400 });
   }
 
-  return Response.json(currentRoundPayload(raw, Date.now()), {
+  const now = Date.now();
+  // 메가빙고만 관리자가 추첨을 앞당길 수 있다.
+  const override = raw === "bingo" ? await bingoOverride(now) : null;
+
+  return Response.json(currentRoundPayload(raw, now, override), {
     headers: { "cache-control": "no-store" },
   });
 }

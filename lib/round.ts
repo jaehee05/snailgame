@@ -1,6 +1,6 @@
 import { buildOdds, type OddsTable } from "./bets";
 import { TICK_MS } from "./config";
-import { BINGO_SETTLE_AT, BINGO_TIMING, DRAW_COUNT } from "./games/bingo";
+import { BINGO_TIMING, DRAW_COUNT } from "./games/bingo";
 import { CRASH_TIMING, crashAtOf, crashPointOf, MAX_MULT } from "./games/crash";
 import { ODDEVEN_SETTLE_AT, ODDEVEN_TIMING } from "./games/oddeven";
 import { SNAIL_FINISH_AT, SNAIL_ROUND_MS, SNAIL_TIMING } from "./games/snail";
@@ -59,8 +59,21 @@ export function snailOutcome(roundId: number): RaceOutcome {
 
 /* ── 회차 상태 ──────────────────────────────────────────── */
 
+/**
+ * 관리자가 "바로진행"을 누르면 그 회차의 추첨 시작 시각만 앞당겨진다.
+ * 결과 자체는 여전히 회차 시드에서 나오므로 무엇이 나올지는 달라지지 않는다.
+ */
+export type Override = { roundId: number; drawAt: number } | null;
+
+/** 추첨이 시작되는 시각 (회차 시작 기준 경과 ms) */
+export function drawStartOf(game: RoundGameId, roundId: number, override?: Override): number {
+  const normal = timingOf(game).betMs;
+  if (game !== "bingo" || !override || override.roundId !== roundId) return normal;
+  return Math.min(normal, Math.max(0, override.drawAt - roundStart(game, roundId)));
+}
+
 /** 결과가 확정되는 시각 (회차 시작 기준 경과 ms) */
-export function settleAtOf(game: RoundGameId, roundId: number): number {
+export function settleAtOf(game: RoundGameId, roundId: number, override?: Override): number {
   switch (game) {
     case "snail":
       return SNAIL_FINISH_AT;
@@ -69,17 +82,27 @@ export function settleAtOf(game: RoundGameId, roundId: number): number {
     case "crash":
       return crashAtOf(secretSeedOf("crash", roundId));
     case "bingo":
-      return BINGO_SETTLE_AT;
+      return drawStartOf(game, roundId, override) + BINGO_TIMING.drawMs;
   }
 }
 
-export function isRoundFinished(game: RoundGameId, roundId: number, now: number): boolean {
-  return now - roundStart(game, roundId) >= settleAtOf(game, roundId);
+export function isRoundFinished(
+  game: RoundGameId,
+  roundId: number,
+  now: number,
+  override?: Override
+): boolean {
+  return now - roundStart(game, roundId) >= settleAtOf(game, roundId, override);
 }
 
-export function isBettingOpen(game: RoundGameId, roundId: number, now: number): boolean {
+export function isBettingOpen(
+  game: RoundGameId,
+  roundId: number,
+  now: number,
+  override?: Override
+): boolean {
   const elapsed = now - roundStart(game, roundId);
-  return elapsed >= 0 && elapsed < timingOf(game).betMs;
+  return elapsed >= 0 && elapsed < drawStartOf(game, roundId, override);
 }
 
 /** 게임마다 베팅 전에 공개되는 정보가 다르다. */
@@ -97,6 +120,7 @@ export type PublicRound = {
   commit: string;
   /** 베팅 마감 이후에만 채워진다. 이 값으로 결과를 직접 계산·검증할 수 있다. */
   secretSeed: string | null;
+  drawAt: number;
   data: RoundData;
 };
 
@@ -121,9 +145,13 @@ function roundData(game: RoundGameId, roundId: number): RoundData {
   }
 }
 
-export function publicRound(game: RoundGameId, roundId: number, now: number): PublicRound {
-  const { betMs } = timingOf(game);
-  const revealed = now - roundStart(game, roundId) >= betMs;
+export function publicRound(
+  game: RoundGameId,
+  roundId: number,
+  now: number,
+  override?: Override
+): PublicRound {
+  const revealed = now - roundStart(game, roundId) >= drawStartOf(game, roundId, override);
   return {
     game,
     id: roundId,
@@ -131,18 +159,20 @@ export function publicRound(game: RoundGameId, roundId: number, now: number): Pu
     publicSeed: publicSeedOf(game, roundId),
     commit: commitOf(game, roundId),
     secretSeed: revealed ? secretSeedOf(game, roundId) : null,
+    /** 관리자가 앞당긴 추첨 시작 시각 (절대 ms). 없으면 null */
+    drawAt: roundStart(game, roundId) + drawStartOf(game, roundId, override),
     data: roundData(game, roundId),
   };
 }
 
-export function currentRoundPayload(game: RoundGameId, now: number) {
+export function currentRoundPayload(game: RoundGameId, now: number, override?: Override) {
   const id = roundIdAt(game, now);
   return {
     now,
     game,
     timing: timingOf(game),
-    round: publicRound(game, id, now),
-    prev: publicRound(game, id - 1, now),
+    round: publicRound(game, id, now, override),
+    prev: publicRound(game, id - 1, now, override),
   };
 }
 

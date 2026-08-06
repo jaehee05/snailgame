@@ -1153,3 +1153,11 @@ a {
 
 .prize-bonus { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 9px; }
 .prize-sub { opacity: 0.8; padding-left: 14px; }
+
+.skip-now {
+  width: 100%;
+  margin-top: 10px;
+  border-color: rgba(94, 232, 200, 0.4);
+  color: var(--accent);
+  background: rgba(94, 232, 200, 0.08);
+}

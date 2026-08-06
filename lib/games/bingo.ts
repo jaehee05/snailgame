@@ -152,9 +152,12 @@ export function drawBalls(secretSeed: string): number[] {
   ).slice(0, DRAW_COUNT);
 }
 
-/** i번째 공이 나오는 시각 (회차 시작 기준) */
-export function ballTimeOf(index: number): number {
-  return BINGO_TIMING.betMs + ((index + 1) * BINGO_TIMING.drawMs) / DRAW_COUNT;
+/**
+ * i번째 공이 나오는 시각 (회차 시작 기준).
+ * drawStart 는 추첨이 시작되는 경과 시각. 관리자가 바로진행을 누르면 이 값이 당겨진다.
+ */
+export function ballTimeOf(index: number, drawStart = BINGO_TIMING.betMs): number {
+  return drawStart + ((index + 1) * BINGO_TIMING.drawMs) / DRAW_COUNT;
 }
 
 /** 지금까지 뽑힌 공으로 완성된 패턴 중 가장 높은 등수 (없으면 0) */

@@ -12,7 +12,6 @@ import { api, formatCoins, useMe, useRound } from "@/lib/client";
 import {
   autoPick,
   ballTimeOf,
-  BINGO_SETTLE_AT,
   BINGO_TIMING,
   columnNumbers,
   columnOf,
@@ -37,8 +36,10 @@ export default function BingoPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const open = elapsed < BINGO_TIMING.betMs;
-  const done = elapsed >= BINGO_SETTLE_AT;
+  // 관리자가 바로진행을 누르면 추첨 시작이 앞당겨진다.
+  const drawStart = round ? round.drawAt - round.start : BINGO_TIMING.betMs;
+  const open = elapsed < drawStart;
+  const done = elapsed >= drawStart + BINGO_TIMING.drawMs;
 
   useEffect(() => {
     if (!done) return;
@@ -51,8 +52,8 @@ export default function BingoPage() {
 
   // 공은 하나씩 순서대로 나온다.
   const shown = useMemo(
-    () => balls.filter((_, i) => elapsed >= ballTimeOf(i)),
-    [balls, elapsed]
+    () => balls.filter((_, i) => elapsed >= ballTimeOf(i, drawStart)),
+    [balls, elapsed, drawStart]
   );
   const drawn = useMemo(() => new Set(shown), [shown]);
   const latest = shown.length > 0 ? shown[shown.length - 1] : null;
@@ -60,10 +61,10 @@ export default function BingoPage() {
   const remaining = Math.max(
     0,
     open
-      ? BINGO_TIMING.betMs - elapsed
+      ? drawStart - elapsed
       : done
         ? BINGO_TIMING.roundMs - elapsed
-        : BINGO_SETTLE_AT - elapsed
+        : drawStart + BINGO_TIMING.drawMs - elapsed
   );
 
   const countByColumn = useMemo(() => {
@@ -85,6 +86,20 @@ export default function BingoPage() {
       if (used >= PICKS_PER_COLUMN[col]) return prev;
       return [...prev, n].sort((a, b) => a - b);
     });
+  }
+
+  async function skipNow() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api("/api/admin", { method: "POST", body: JSON.stringify({ action: "bingoSkip" }) });
+      setNotice("추첨을 바로 시작합니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "바로진행에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function buy(count: number, auto: boolean) {
@@ -133,8 +148,8 @@ export default function BingoPage() {
             remaining={remaining}
             progress={
               open
-                ? 1 - remaining / BINGO_TIMING.betMs
-                : Math.min(1, (elapsed - BINGO_TIMING.betMs) / BINGO_TIMING.drawMs)
+                ? 1 - remaining / Math.max(1, drawStart)
+                : Math.min(1, (elapsed - drawStart) / BINGO_TIMING.drawMs)
             }
           />
 
@@ -248,6 +263,12 @@ export default function BingoPage() {
             </div>
 
             {error && <p className="error">{error}</p>}
+
+            {me.user.isAdmin && open && (
+              <button type="button" className="chip skip-now" disabled={busy} onClick={skipNow}>
+                ⏩ 바로진행 (관리자)
+              </button>
+            )}
           </div>
 
           <div className="panel">

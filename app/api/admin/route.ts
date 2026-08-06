@@ -1,5 +1,12 @@
 import { ApiError, errorResponse, requireAdmin, requireUser } from "@/lib/api-auth";
-import { grantCoins, listUsers, recentLedger, resetPassword, setAdmin } from "@/lib/db";
+import {
+  grantCoins,
+  listUsers,
+  recentLedger,
+  resetPassword,
+  setAdmin,
+  skipBingoDraw,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +27,18 @@ export async function POST(req: Request) {
     requireAdmin(me);
 
     const body = (await req.json()) as {
-      action?: "grant" | "setAdmin" | "resetPassword";
+      action?: "grant" | "setAdmin" | "resetPassword" | "bingoSkip";
       uid?: string;
       amount?: number;
       memo?: string;
       isAdmin?: boolean;
       password?: string;
     };
+
+    if (body.action === "bingoSkip") {
+      const drawAt = await skipBingoDraw(me, Date.now());
+      return Response.json({ ok: true, drawAt });
+    }
 
     if (!body.uid) throw new ApiError("대상 사용자를 지정해 주세요.", 400);
 
