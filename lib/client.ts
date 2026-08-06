@@ -87,7 +87,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
  * 회차 정보를 주기적으로 받아오고, 서버 시계에 맞춘 현재 시각을 돌려준다.
  * 모든 참가자가 같은 순간에 같은 결과를 보게 만드는 부분이다.
  */
-export function useRound(game: GameId) {
+export function useRound(game: GameId, pollMs = 3000) {
   const [payload, setPayload] = useState<RoundPayload | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const offset = useRef(0);
@@ -108,13 +108,13 @@ export function useRound(game: GameId) {
     // 서버 응답을 기다렸다가 state 를 채우는 구독형 effect 다.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
     refresh();
-    const poll = setInterval(refresh, 3000);
+    const poll = setInterval(refresh, pollMs);
     const tick = setInterval(() => setNow(Date.now() + offset.current), 60);
     return () => {
       clearInterval(poll);
       clearInterval(tick);
     };
-  }, [refresh]);
+  }, [refresh, pollMs]);
 
   const round = payload?.round ?? null;
 

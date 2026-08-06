@@ -24,7 +24,8 @@ const AUTO_PRESETS = [1.3, 1.5, 2, 3, 5];
 
 export default function CrashPage() {
   const router = useRouter();
-  const { round, prev, elapsed, error: roundError } = useRound("crash");
+  // 터지는 순간을 서버가 알려줘야 하므로 상승 중에는 자주 물어본다.
+  const { round, prev, elapsed, error: roundError } = useRound("crash", 400);
   const redirect = useCallback(() => router.replace("/login"), [router]);
   const { me, notice, setNotice, fatal, loadMe } = useMe("crash", round?.id, redirect);
 
@@ -35,21 +36,24 @@ export default function CrashPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 시드가 공개되면 브라우저가 직접 터지는 지점을 계산한다.
+  /*
+   * 시드는 터진 뒤에야 내려온다. 그전까지는 언제 터질지 아무도 모른다
+   * (알면 그 직전에 인출하면 되니 게임이 성립하지 않는다).
+   * 상승 곡선은 시간만 알면 그릴 수 있으므로 시드가 없어도 된다.
+   */
   const secretSeed = round?.secretSeed ?? null;
   const crashPoint = useMemo(() => (secretSeed ? crashPointOf(secretSeed) : null), [secretSeed]);
   const crashAt = crashPoint === null ? null : CRASH_TIMING.betMs + timeOfMult(crashPoint);
 
   const runElapsed = elapsed - CRASH_TIMING.betMs;
   const roundEnd = round ? round.endAt - round.start : CRASH_TIMING.betMs + CRASH_TIMING.runMs;
-  // 터지고 5초 뒤면 회차가 닫히고 바로 다음 판 출발 대기로 넘어간다.
   const open = elapsed < CRASH_TIMING.betMs;
-  const crashed = crashAt !== null && elapsed >= crashAt;
+  const crashed = crashPoint !== null;
   const running = !open && !crashed;
 
   const liveMult = crashed
-    ? (crashPoint ?? 1)
-    : Math.min(crashPoint ?? MAX_MULT, multAt(Math.max(0, runElapsed)));
+    ? crashPoint
+    : Math.min(MAX_MULT, multAt(Math.max(0, runElapsed)));
 
   const myBet = (me?.bets ?? []).find((b) => b.roundId === round?.id) ?? null;
   const cashedOut = myBet?.cashoutMult ?? null;
@@ -60,19 +64,14 @@ export default function CrashPage() {
     return () => clearTimeout(t);
   }, [crashed, round?.id, loadMe]);
 
-  const remaining = Math.max(
-    0,
-    open
-      ? CRASH_TIMING.betMs - elapsed
-      : crashed
-        ? roundEnd - elapsed
-        : (crashAt ?? CRASH_TIMING.betMs) - elapsed
-  );
+  // 상승 중에는 "남은 시간"이라는 게 있으면 안 된다. 흐른 시간만 보여준다.
+  const remaining = Math.max(0, open ? CRASH_TIMING.betMs - elapsed : roundEnd - elapsed);
 
   // 곡선을 지금까지 그려진 만큼만 그린다.
   const curve = useMemo(() => {
     if (runElapsed <= 0) return "";
-    const shown = Math.min(runElapsed, crashAt ? crashAt - CRASH_TIMING.betMs : runElapsed);
+    const shown =
+      crashAt !== null ? Math.min(runElapsed, crashAt - CRASH_TIMING.betMs) : runElapsed;
     const xMax = Math.max(4000, shown * 1.15);
     const yMax = Math.max(2, liveMult * 1.15);
     const pts: string[] = [];
@@ -144,6 +143,7 @@ export default function CrashPage() {
                 ? 1 - remaining / CRASH_TIMING.betMs
                 : Math.min(1, runElapsed / CRASH_TIMING.runMs)
             }
+            clockText={running ? formatClock(Math.max(0, runElapsed)) : undefined}
           />
 
           <div className={`crash-stage${crashed ? " is-crashed" : ""}`}>

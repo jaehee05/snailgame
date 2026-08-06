@@ -151,24 +151,38 @@ export function currentRoundPayload(game: RoundGameId, now: number) {
   };
 }
 
-/** 빙고·그래프는 회차가 사슬처럼 이어지므로 일정을 받아서 만든다. */
+/**
+ * 빙고·그래프는 회차가 사슬처럼 이어지므로 일정을 받아서 만든다.
+ *
+ * 그래프는 조심할 게 있다. "언제 터지는가"가 곧 "몇 배에서 터지는가"라서,
+ * 회차 종료 시각이나 시드를 미리 내보내면 결과를 알려주는 것과 같다.
+ * 그래서 터지기 전까지는 시드를 숨기고, 종료 시각도 최대치로 가려서 보낸다.
+ */
 export function chainRoundPayload(game: ChainGameId, sched: RoundSchedule, now: number) {
   const data: RoundData =
     game === "bingo"
       ? { game: "bingo", drawCount: DRAW_COUNT, drawMs: BINGO_TIMING.drawMs }
       : { game: "crash", maxMult: MAX_MULT, runMs: CRASH_TIMING.runMs };
 
-  const build = (id: number, startAt: number, drawAt: number, endAt: number): PublicRound => ({
-    game,
-    id,
-    start: startAt,
-    publicSeed: publicSeedOf(game, id),
-    commit: commitOf(game, id),
-    secretSeed: now >= drawAt ? secretSeedOf(game, id) : null,
-    drawAt,
-    endAt,
-    data,
-  });
+  const build = (id: number, startAt: number, drawAt: number, endAt: number): PublicRound => {
+    // 빙고는 추첨이 시작될 때, 그래프는 터진 뒤에 공개한다.
+    const revealAt = game === "bingo" ? drawAt : endAt - CRASH_TIMING.resultMs;
+    const revealed = now >= revealAt;
+    return {
+      game,
+      id,
+      start: startAt,
+      publicSeed: publicSeedOf(game, id),
+      commit: commitOf(game, id),
+      secretSeed: revealed ? secretSeedOf(game, id) : null,
+      drawAt,
+      endAt:
+        game === "crash" && !revealed
+          ? drawAt + CRASH_TIMING.runMs + CRASH_TIMING.resultMs
+          : endAt,
+      data,
+    };
+  };
 
   const prevLen = timingOf(game).roundMs;
   return {

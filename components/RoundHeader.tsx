@@ -9,12 +9,15 @@ export function RoundHeader({
   label,
   remaining,
   progress,
+  clockText,
 }: {
   roundId: number;
   phase: "betting" | "racing" | "result";
   label: string;
   remaining: number;
   progress: number;
+  /** 남은 시간 대신 보여줄 문구 (그래프는 남은 시간을 알려주면 안 된다) */
+  clockText?: string;
 }) {
   return (
     <>
@@ -24,7 +27,7 @@ export function RoundHeader({
           <span className={`phase phase-${phase}`}>{label}</span>
         </div>
         <span className={`clock${remaining < 5000 && phase === "betting" ? " is-urgent" : ""}`}>
-          {formatClock(remaining)}
+          {clockText ?? formatClock(remaining)}
         </span>
       </div>
       <div className="phase-bar">
