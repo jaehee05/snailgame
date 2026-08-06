@@ -1,10 +1,10 @@
 import { buildOdds, type OddsTable } from "./bets";
 import { TICK_MS } from "./config";
-import { BINGO_TIMING, DRAW_COUNT, type BingoSchedule } from "./games/bingo";
-import { CRASH_TIMING, crashAtOf, crashPointOf, MAX_MULT } from "./games/crash";
+import { BINGO_TIMING, DRAW_COUNT } from "./games/bingo";
+import { CRASH_MAX_ROUND_MS, CRASH_TIMING, crashAtOf, crashPointOf, MAX_MULT } from "./games/crash";
 import { ODDEVEN_SETTLE_AT, ODDEVEN_TIMING } from "./games/oddeven";
 import { SNAIL_FINISH_AT, SNAIL_ROUND_MS, SNAIL_TIMING } from "./games/snail";
-import type { RoundGameId } from "./games/types";
+import type { ChainGameId, RoundGameId, RoundSchedule } from "./games/types";
 import { buildLineup, simulate, type Racer, type RaceOutcome } from "./race";
 import { commitOf, publicSeedOf, secretSeedOf } from "./seeds";
 
@@ -17,7 +17,7 @@ export function timingOf(game: RoundGameId): Timing {
     case "oddeven":
       return { roundMs: ODDEVEN_TIMING.roundMs, betMs: ODDEVEN_TIMING.betMs };
     case "crash":
-      return { roundMs: CRASH_TIMING.roundMs, betMs: CRASH_TIMING.betMs };
+      return { roundMs: CRASH_MAX_ROUND_MS, betMs: CRASH_TIMING.betMs };
     case "bingo":
       return { roundMs: BINGO_TIMING.roundMs, betMs: BINGO_TIMING.betMs };
   }
@@ -151,27 +151,33 @@ export function currentRoundPayload(game: RoundGameId, now: number) {
   };
 }
 
-/** 빙고는 회차가 사슬처럼 이어지므로 일정을 받아서 만든다. */
-export function bingoRoundPayload(sched: BingoSchedule, now: number) {
+/** 빙고·그래프는 회차가 사슬처럼 이어지므로 일정을 받아서 만든다. */
+export function chainRoundPayload(game: ChainGameId, sched: RoundSchedule, now: number) {
+  const data: RoundData =
+    game === "bingo"
+      ? { game: "bingo", drawCount: DRAW_COUNT, drawMs: BINGO_TIMING.drawMs }
+      : { game: "crash", maxMult: MAX_MULT, runMs: CRASH_TIMING.runMs };
+
   const build = (id: number, startAt: number, drawAt: number, endAt: number): PublicRound => ({
-    game: "bingo",
+    game,
     id,
     start: startAt,
-    publicSeed: publicSeedOf("bingo", id),
-    commit: commitOf("bingo", id),
-    secretSeed: now >= drawAt ? secretSeedOf("bingo", id) : null,
+    publicSeed: publicSeedOf(game, id),
+    commit: commitOf(game, id),
+    secretSeed: now >= drawAt ? secretSeedOf(game, id) : null,
     drawAt,
     endAt,
-    data: { game: "bingo", drawCount: DRAW_COUNT, drawMs: BINGO_TIMING.drawMs },
+    data,
   });
 
+  const prevLen = timingOf(game).roundMs;
   return {
     now,
-    game: "bingo" as const,
-    timing: timingOf("bingo"),
+    game,
+    timing: timingOf(game),
     round: build(sched.roundId, sched.startAt, sched.drawAt, sched.endAt),
     // 지난 회차는 이미 끝났으므로 시드가 공개된 상태다.
-    prev: build(sched.roundId - 1, sched.startAt - BINGO_TIMING.roundMs, sched.startAt, sched.startAt),
+    prev: build(sched.roundId - 1, sched.startAt - prevLen, sched.startAt, sched.startAt),
   };
 }
 

@@ -1,6 +1,5 @@
 import { ApiError, errorResponse, requireUser } from "@/lib/api-auth";
-import { cashOut } from "@/lib/db";
-import { roundIdAt } from "@/lib/round";
+import { cashOut, chainSchedule } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +10,9 @@ export async function POST(req: Request) {
     const body = (await req.json()) as { roundId?: number };
 
     const now = Date.now();
-    const roundId = body.roundId ?? roundIdAt("crash", now);
-    if (roundId !== roundIdAt("crash", now)) throw new ApiError("회차가 바뀌었습니다.", 409);
+    const current = (await chainSchedule("crash", now)).roundId;
+    const roundId = body.roundId ?? current;
+    if (roundId !== current) throw new ApiError("회차가 바뀌었습니다.", 409);
 
     return Response.json(await cashOut(user.uid, roundId, now));
   } catch (err) {

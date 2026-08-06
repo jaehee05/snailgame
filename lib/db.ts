@@ -9,7 +9,6 @@ import {
   BINGO_TIMING,
   normalSchedule,
   settleAtOfSchedule,
-  type BingoSchedule,
 } from "./games/bingo";
 import { drawTriple, TRIPLE_PRICE, type TripleResult } from "./games/triple";
 import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
@@ -23,14 +22,16 @@ import {
   TICKET_PRICE,
 } from "./games/bingo";
 import {
+  CRASH_MAX_ROUND_MS,
   CRASH_TIMING,
+  crashEndOf,
   crashSettle,
   isValidAutoTarget,
   multAt,
   type CrashBetExtra,
 } from "./games/crash";
 import { isOddEvenSelection, oddEvenHit, oddEvenOdds, oddEvenOutcome } from "./games/oddeven";
-import type { GameId, RoundGameId, Selection } from "./games/types";
+import type { ChainGameId, GameId, RoundGameId, RoundSchedule, Selection } from "./games/types";
 import {
   crashPointOfRound,
   isBettingOpen,
@@ -255,10 +256,10 @@ export async function placeBet(
   autoTarget: number | undefined,
   now: number
 ): Promise<{ bet: PlacedBet; balance: number }> {
-  if (game === "bingo") {
-    const sched = await bingoSchedule(now);
+  if (game === "bingo" || game === "crash") {
+    const sched = await chainSchedule(game, now);
     if (roundId !== sched.roundId || now >= sched.drawAt) {
-      throw new Error("이번 회차 구입이 마감되었습니다.");
+      throw new Error("이번 회차 베팅이 마감되었습니다.");
     }
   } else if (!isBettingOpen(game, roundId, now)) {
     throw new Error("이번 회차 베팅이 마감되었습니다.");
@@ -332,7 +333,9 @@ export async function cashOut(
   roundId: number,
   now: number
 ): Promise<{ mult: number; payout: number }> {
-  const elapsed = now - roundStart("crash", roundId);
+  const sched = await chainSchedule("crash", now);
+  if (roundId !== sched.roundId) throw new Error("회차가 바뀌었습니다.");
+  const elapsed = now - sched.startAt;
   if (elapsed < CRASH_TIMING.betMs) throw new Error("아직 출발 전입니다.");
 
   const crashPoint = crashPointOfRound(roundId);
@@ -420,9 +423,12 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   const pending = await userRef.collection("bets").where("settled", "==", false).get();
   if (pending.empty) return [];
 
-  const sched = await bingoSchedule(now);
-  const bingoFinished = (roundId: number) =>
-    roundId < sched.roundId || now >= settleAtOfSchedule(sched);
+  const [bingo, crash] = await Promise.all([chainSchedule("bingo", now), chainSchedule("crash", now)]);
+  const chainFinished = (game: ChainGameId, roundId: number) => {
+    const s = game === "bingo" ? bingo : crash;
+    const settleAt = game === "bingo" ? settleAtOfSchedule(s) : s.endAt - CRASH_TIMING.resultMs;
+    return roundId < s.roundId || now >= settleAt;
+  };
 
   // (게임, 회차) 단위로 묶는다
   const groups = new Map<string, { game: RoundGameId; roundId: number; docs: typeof pending.docs }>();
@@ -434,7 +440,9 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
     if (game === ("triple" as RoundGameId)) continue;
     const { roundId } = data;
     const finished =
-      game === "bingo" ? bingoFinished(roundId) : isRoundFinished(game, roundId, now);
+      game === "bingo" || game === "crash"
+        ? chainFinished(game, roundId)
+        : isRoundFinished(game, roundId, now);
     if (!finished) continue;
     const key = `${game}:${roundId}`;
     const group = groups.get(key) ?? { game, roundId, docs: [] };
@@ -478,8 +486,10 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
         bets: settledBets,
         at:
           game === "bingo"
-            ? settleAtOfSchedule(sched)
-            : roundStart(game, roundId) + settleAtOf(game, roundId),
+            ? settleAtOfSchedule(bingo)
+            : game === "crash"
+              ? crash.endAt - CRASH_TIMING.resultMs
+              : roundStart(game, roundId) + settleAtOf(game, roundId),
       };
       tx.set(userRef.collection("results").doc(`${game}_${roundId}`), roundResult);
       if (returned > 0) {
@@ -498,67 +508,85 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
 }
 
 
-/* ── 빙고 회차 일정 ───────────────────────────── */
+/* ── 사슬 회차 일정 (빙고 · 그래프) ──────────────── */
 
 /*
- * 다른 게임은 회차가 시계 격자 위에서만 돌아가지만, 빙고는 관리자가
- * 추첨을 앞당길 수 있어야 한다. 앞당긴 회차는 8분을 채우지 않고 추첨이
- * 끝나는 대로 닫히고 바로 다음 회차가 열려야 하므로, 격자 대신 회차를
- * 사슬처럼 이어 붙인다. 현재 회차의 일정만 control/bingo 에 들고 있으면 된다.
+ * 다른 게임은 회차가 시계 격자 위에서만 돌아간다. 하지만
+ *   빙고 — 관리자가 추첨을 앞당길 수 있고
+ *   그래프 — 터지는 시점이 회차마다 달라 길이가 들쭉날쭉하다
+ * 이 둘은 회차가 끝나는 대로 다음 회차가 열려야 해서, 격자 대신 회차를
+ * 사슬처럼 이어 붙인다. 현재 회차의 일정만 control/<게임> 에 들고 있으면 된다.
  *
- * 앞당기는 것은 "언제 뽑느냐" 뿐이다. 무엇이 뽑히는지는 회차 번호에서 나온
- * 시드가 정하므로 결과를 손댈 수는 없다.
+ * 언제 끝나는지만 달라질 뿐, 무엇이 나오는지는 회차 번호에서 나온 시드가
+ * 정하므로 결과를 손댈 수는 없다.
  */
-const CONTROL_DOC = "bingo";
-let cachedSchedule: { at: number; value: BingoSchedule } | null = null;
 
-function advance(s: BingoSchedule, now: number): BingoSchedule {
-  if (now < s.endAt) return s;
-  const { roundMs } = BINGO_TIMING;
-  const skipped = Math.floor((now - s.endAt) / roundMs) + 1;
-  return normalSchedule(s.roundId + skipped, s.endAt + (skipped - 1) * roundMs);
+/** 오래 아무도 안 들어왔으면 굳이 따라잡지 않고 지금부터 새로 시작한다. */
+const RESYNC_AFTER = 10 * 60_000;
+
+const cachedSchedule: Partial<Record<ChainGameId, { at: number; value: RoundSchedule }>> = {};
+
+function baseSchedule(game: ChainGameId, roundId: number, startAt: number): RoundSchedule {
+  if (game === "bingo") return normalSchedule(roundId, startAt);
+  return {
+    roundId,
+    startAt,
+    drawAt: startAt + CRASH_TIMING.betMs,
+    endAt: startAt + crashEndOf(secretSeedOf("crash", roundId)),
+  };
+}
+
+function roundLengthOf(game: ChainGameId): number {
+  return game === "bingo" ? BINGO_TIMING.roundMs : CRASH_MAX_ROUND_MS;
+}
+
+function firstSchedule(game: ChainGameId, now: number): RoundSchedule {
+  const len = roundLengthOf(game);
+  const id = Math.floor(now / len);
+  return baseSchedule(game, id, id * len);
+}
+
+function advance(game: ChainGameId, s: RoundSchedule, now: number): RoundSchedule {
+  if (now - s.endAt > RESYNC_AFTER) return baseSchedule(game, s.roundId + 1, now);
+  let cur = s;
+  let guard = 0;
+  while (now >= cur.endAt && guard++ < 5_000) {
+    cur = baseSchedule(game, cur.roundId + 1, cur.endAt);
+  }
+  return cur;
 }
 
 /** 지금 진행 중인 회차. 끝난 회차는 여기서 다음 회차로 넘긴다. */
-export async function bingoSchedule(now: number, fresh = false): Promise<BingoSchedule> {
-  if (!fresh && cachedSchedule && now - cachedSchedule.at < 2_000) {
-    const s = cachedSchedule.value;
-    if (now < s.endAt) return s;
-  }
+export async function chainSchedule(
+  game: ChainGameId,
+  now: number,
+  fresh = false
+): Promise<RoundSchedule> {
+  const hit = cachedSchedule[game];
+  if (!fresh && hit && now - hit.at < 2_000 && now < hit.value.endAt) return hit.value;
 
-  const ref = adminDb().collection("control").doc(CONTROL_DOC);
+  const ref = adminDb().collection("control").doc(game);
   const next = await adminDb().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const current = snap.exists
-      ? (snap.data() as BingoSchedule)
-      : // 처음 한 번은 시계 격자에서 시작한다.
-        normalSchedule(
-          Math.floor(now / BINGO_TIMING.roundMs),
-          Math.floor(now / BINGO_TIMING.roundMs) * BINGO_TIMING.roundMs
-        );
-
-    const moved = advance(current, now);
+    const current = snap.exists ? (snap.data() as RoundSchedule) : firstSchedule(game, now);
+    const moved = advance(game, current, now);
     if (!snap.exists || moved.roundId !== current.roundId) tx.set(ref, moved);
     return moved;
   });
 
-  cachedSchedule = { at: now, value: next };
+  cachedSchedule[game] = { at: now, value: next };
   return next;
 }
 
-export async function skipBingoDraw(by: UserDoc, now: number): Promise<BingoSchedule> {
+export async function skipBingoDraw(by: UserDoc, now: number): Promise<RoundSchedule> {
   if (!by.isAdmin) throw new Error("권한이 없습니다.");
 
-  const ref = adminDb().collection("control").doc(CONTROL_DOC);
+  const ref = adminDb().collection("control").doc("bingo");
   const updated = await adminDb().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const current = advance(
-      snap.exists
-        ? (snap.data() as BingoSchedule)
-        : normalSchedule(
-            Math.floor(now / BINGO_TIMING.roundMs),
-            Math.floor(now / BINGO_TIMING.roundMs) * BINGO_TIMING.roundMs
-          ),
+      "bingo",
+      snap.exists ? (snap.data() as RoundSchedule) : firstSchedule("bingo", now),
       now
     );
 
@@ -567,7 +595,7 @@ export async function skipBingoDraw(by: UserDoc, now: number): Promise<BingoSche
     if (drawAt >= current.drawAt) throw new Error("이미 추첨이 시작되었습니다.");
 
     // 추첨이 끝나면 결과를 잠깐 보여주고 바로 다음 회차가 열린다.
-    const moved: BingoSchedule = {
+    const moved: RoundSchedule = {
       ...current,
       drawAt,
       endAt: drawAt + BINGO_TIMING.drawMs + BINGO_RESULT_MS,
@@ -576,7 +604,7 @@ export async function skipBingoDraw(by: UserDoc, now: number): Promise<BingoSche
     return moved;
   });
 
-  cachedSchedule = { at: now, value: updated };
+  cachedSchedule.bingo = { at: now, value: updated };
   return updated;
 }
 

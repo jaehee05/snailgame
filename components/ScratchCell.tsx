@@ -76,7 +76,16 @@ export function ScratchCell({
     if (!canvas || revealed) return;
     // 레이아웃이 잡힌 뒤에 그려야 크기가 0 이 아니다.
     const id = requestAnimationFrame(() => setReady(paintFoil(canvas)));
-    return () => cancelAnimationFrame(id);
+
+    // touch-action 만으로는 부족하다. 문지르는 동안 화면이 따라 스크롤되면
+    // 긁을 수가 없으므로 이 칸 위의 터치 이동은 직접 막는다.
+    const block = (e: TouchEvent) => e.preventDefault();
+    canvas.addEventListener("touchmove", block, { passive: false });
+
+    return () => {
+      cancelAnimationFrame(id);
+      canvas.removeEventListener("touchmove", block);
+    };
   }, [revealed]);
 
   const rub = useCallback(

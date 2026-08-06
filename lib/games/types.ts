@@ -41,7 +41,23 @@ export function isRoundGameId(value: unknown): value is RoundGameId {
 /** 모든 게임의 베팅은 이 형태로 표현한다. picks 의 의미는 게임마다 다르다. */
 export type Selection = { kind: string; picks: number[] };
 
-/** 게임마다 회차 길이가 다르다. 모두 시계 격자 위에 올라간다. */
+/**
+ * 회차 길이가 매번 달라지는 게임(빙고 · 그래프)의 일정.
+ * 시계 격자로는 표현할 수 없어서 회차를 사슬처럼 이어 붙인다.
+ */
+export type RoundSchedule = {
+  roundId: number;
+  startAt: number;
+  /** 구입/베팅 마감 = 결과 공개 시작 */
+  drawAt: number;
+  /** 이 회차의 끝 = 다음 회차 시작 */
+  endAt: number;
+};
+
+/** 사슬로 이어지는 게임들 */
+export type ChainGameId = "bingo" | "crash";
+
+/** 게임마다 회차 길이가 다르다. */
 export type GameTiming = {
   roundMs: number;
   /** 베팅을 받는 구간 (회차 시작 기준) */

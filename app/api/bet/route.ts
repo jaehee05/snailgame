@@ -1,5 +1,5 @@
 import { ApiError, errorResponse, requireUser } from "@/lib/api-auth";
-import { bingoSchedule, placeBet } from "@/lib/db";
+import { chainSchedule, placeBet } from "@/lib/db";
 import { isRoundGameId } from "@/lib/games/types";
 import { roundIdAt } from "@/lib/round";
 
@@ -21,9 +21,11 @@ export async function POST(req: Request) {
     if (!body.kind) throw new ApiError("베팅 종류가 올바르지 않습니다.", 400);
 
     const now = Date.now();
-    // 빙고는 회차가 시계 격자가 아니라 사슬로 이어진다.
+    // 빙고·그래프는 회차가 시계 격자가 아니라 사슬로 이어진다.
     const currentId =
-      body.game === "bingo" ? (await bingoSchedule(now)).roundId : roundIdAt(body.game, now);
+      body.game === "bingo" || body.game === "crash"
+        ? (await chainSchedule(body.game, now)).roundId
+        : roundIdAt(body.game, now);
     const roundId = body.roundId ?? currentId;
     // 화면이 조금 늦어 이전 회차 번호로 들어오면 그냥 거절한다. (마감 후 베팅 방지)
     if (roundId !== currentId) {

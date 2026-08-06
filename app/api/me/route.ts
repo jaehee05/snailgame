@@ -1,5 +1,5 @@
 import { errorResponse, requireUser } from "@/lib/api-auth";
-import { betsForRound, bingoSchedule, getUser, recentResults, settleUser } from "@/lib/db";
+import { betsForRound, chainSchedule, getUser, recentResults, settleUser } from "@/lib/db";
 import { isRoundGameId } from "@/lib/games/types";
 import { roundIdAt } from "@/lib/round";
 
@@ -17,8 +17,11 @@ export async function GET(req: Request) {
     const justSettled = await settleUser(user.uid, now);
     const fresh = justSettled.length > 0 ? ((await getUser(user.uid)) ?? user) : user;
 
-    // 빙고는 회차가 시계 격자가 아니라 사슬로 이어진다.
-    const roundId = game === "bingo" ? (await bingoSchedule(now)).roundId : roundIdAt(game, now);
+    // 빙고·그래프는 회차가 시계 격자가 아니라 사슬로 이어진다.
+    const roundId =
+      game === "bingo" || game === "crash"
+        ? (await chainSchedule(game, now)).roundId
+        : roundIdAt(game, now);
     const [bets, results] = await Promise.all([
       betsForRound(user.uid, game, roundId),
       recentResults(user.uid),

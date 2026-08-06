@@ -1,4 +1,5 @@
 import { rngFromSeed, shuffle } from "../prng";
+import type { RoundSchedule } from "./types";
 
 /*
  * 빙고 (동행복권 방식).
@@ -32,18 +33,8 @@ export const BINGO_TIMING = {
 export const BINGO_RESULT_MS =
   BINGO_TIMING.roundMs - BINGO_TIMING.betMs - BINGO_TIMING.drawMs;
 
-/** 한 회차의 일정. 관리자가 바로진행을 누르면 drawAt/endAt 이 앞당겨진다. */
-export type BingoSchedule = {
-  roundId: number;
-  startAt: number;
-  /** 구입 마감 = 추첨 시작 */
-  drawAt: number;
-  /** 이 회차의 끝 = 다음 회차 시작 */
-  endAt: number;
-};
-
-/** 정상 진행일 때의 일정 */
-export function normalSchedule(roundId: number, startAt: number): BingoSchedule {
+/** 정상 진행일 때의 일정. 관리자가 바로진행을 누르면 drawAt/endAt 이 앞당겨진다. */
+export function normalSchedule(roundId: number, startAt: number): RoundSchedule {
   return {
     roundId,
     startAt,
@@ -53,7 +44,7 @@ export function normalSchedule(roundId: number, startAt: number): BingoSchedule 
 }
 
 /** 추첨이 끝나 결과가 확정되는 시각 */
-export function settleAtOfSchedule(s: BingoSchedule): number {
+export function settleAtOfSchedule(s: RoundSchedule): number {
   return s.drawAt + BINGO_TIMING.drawMs;
 }
 

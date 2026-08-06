@@ -9,10 +9,11 @@ import { rngFromSeed } from "../prng";
  */
 
 export const CRASH_TIMING = {
-  roundMs: 36_000,
   betMs: 12_000,
   /** 그래프가 올라갈 수 있는 최대 시간 */
   runMs: 16_000,
+  /** 터지고 나서 다음 회차 출발 대기로 넘어가기까지 */
+  resultMs: 5_000,
 };
 
 /** 배수 상승 속도 (초당 지수) */
@@ -46,6 +47,19 @@ export function crashPointOf(secretSeed: string): number {
 export function crashAtOf(secretSeed: string): number {
   return CRASH_TIMING.betMs + timeOfMult(crashPointOf(secretSeed));
 }
+
+/**
+ * 이 회차가 끝나는 시각 (회차 시작 기준 ms).
+ * 터지고 5초 뒤면 바로 다음 회차 출발 대기로 넘어간다. 그래서 회차 길이가
+ * 회차마다 다르고, 빙고처럼 사슬로 이어 붙인다.
+ */
+export function crashEndOf(secretSeed: string): number {
+  return crashAtOf(secretSeed) + CRASH_TIMING.resultMs;
+}
+
+/** 가장 오래 끌었을 때의 회차 길이 (일정 계산 상한) */
+export const CRASH_MAX_ROUND_MS =
+  CRASH_TIMING.betMs + CRASH_TIMING.runMs + CRASH_TIMING.resultMs;
 
 /** 결과가 확정되는 시각 = 터진 시각 */
 export function crashSettleAt(secretSeed: string): number {

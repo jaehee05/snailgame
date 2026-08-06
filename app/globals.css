@@ -1383,3 +1383,27 @@ input[type="email"] {
 }
 
 .more-btn:hover { border-color: var(--dim); color: var(--text); background: var(--bg-2); }
+
+/* 게임 화면에서 글자가 드래그로 잡히면 조작이 방해된다 */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+.mono {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 긁는 동안 화면이 밀리지 않도록 */
+.tl-cells,
+.tl-panels {
+  touch-action: pan-y;
+}
+
+.tl-cells .scell {
+  touch-action: none;
+}

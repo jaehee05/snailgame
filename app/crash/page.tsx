@@ -40,6 +40,8 @@ export default function CrashPage() {
   const crashAt = crashPoint === null ? null : CRASH_TIMING.betMs + timeOfMult(crashPoint);
 
   const runElapsed = elapsed - CRASH_TIMING.betMs;
+  const roundEnd = round ? round.endAt - round.start : CRASH_TIMING.betMs + CRASH_TIMING.runMs;
+  // 터지고 5초 뒤면 회차가 닫히고 바로 다음 판 출발 대기로 넘어간다.
   const open = elapsed < CRASH_TIMING.betMs;
   const crashed = crashAt !== null && elapsed >= crashAt;
   const running = !open && !crashed;
@@ -62,7 +64,7 @@ export default function CrashPage() {
     open
       ? CRASH_TIMING.betMs - elapsed
       : crashed
-        ? CRASH_TIMING.roundMs - elapsed
+        ? roundEnd - elapsed
         : (crashAt ?? CRASH_TIMING.betMs) - elapsed
   );
 
