@@ -115,18 +115,14 @@ export default function BingoPage() {
     setBusy(true);
     setError(null);
     try {
-      for (let i = 0; i < count; i++) {
-        await api("/api/bet", {
-          method: "POST",
-          body: JSON.stringify({
-            game: "bingo",
-            roundId: round.id,
-            kind: "ticket",
-            picks: auto || !complete ? autoPick() : picks,
-            amount: TICKET_PRICE,
-          }),
-        });
-      }
+      // 여러 장은 한 번에 보낸다 (중간에 끊겨 잔액만 빠지는 일이 없다)
+      const picksList = Array.from({ length: count }, () =>
+        auto || !complete ? autoPick() : picks
+      );
+      await api("/api/bet", {
+        method: "POST",
+        body: JSON.stringify({ game: "bingo", roundId: round.id, kind: "ticket", picksList }),
+      });
       if (!auto) setPicks([]);
       await loadMe();
     } catch (err) {
@@ -243,7 +239,7 @@ export default function BingoPage() {
 
             <p className="kind-desc">
               B·I·G·O 각 5개, N 4개 해서 24개를 고릅니다. 가운데는 FREE 입니다.
-              고르기 번거로우면 자동선택으로 사면 됩니다.
+              고르기 번거로우면 자동선택으로 사면 됩니다. 한 회차 최대 {MAX_TICKETS}장.
             </p>
 
             <button
@@ -256,7 +252,7 @@ export default function BingoPage() {
             </button>
 
             <div className="amount-row" style={{ marginTop: 8 }}>
-              {[1, 3, 5, 10].map((n) => (
+              {[1, 5, 10, 50].map((n) => (
                 <button
                   key={n}
                   type="button"

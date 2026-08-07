@@ -62,9 +62,9 @@ export const DRAW_COUNT = 49;
 export const FREE_CELL = 12;
 
 /** 한 장 가격 (고정) */
-export const TICKET_PRICE = 1_000;
+export const TICKET_PRICE = 10_000;
 /** 한 회차에 살 수 있는 최대 장수 */
-export const MAX_TICKETS = 10;
+export const MAX_TICKETS = 100;
 
 export function columnOf(n: number): number {
   return Math.floor((n - 1) / COLUMN_RANGE);
@@ -120,16 +120,16 @@ export const PATTERNS: { rank: number; name: string; cells: number[] }[] = [
 ];
 
 /**
- * 등수별 당첨금 (한 장 1,000 코인 기준, 고정 금액).
+ * 등수별 당첨금 (한 장 10,000 코인 기준, 고정 금액).
  * 몬테카를로 1,000만 회로 환수율을 맞춰 정했다. lib/games/bingo 주석 참고.
  */
 export const PRIZES: Record<number, number> = {
-  1: 100_000_000,
-  2: 400_000,
-  3: 50_000,
-  4: 6_000,
-  5: 2_000,
-  6: 900,
+  1: 1_000_000_000,
+  2: 4_000_000,
+  3: 500_000,
+  4: 60_000,
+  5: 20_000,
+  6: 9_000,
 };
 
 /* ── 카드와 추첨 ─────────────────────────────────────── */

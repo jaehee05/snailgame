@@ -302,15 +302,13 @@ export async function placeBet(
     const existing = await tx.get(
       userRef.collection("bets").where("roundId", "==", roundId).where("game", "==", game)
     );
-    if (existing.size >= MAX_BETS_PER_ROUND) {
-      throw new Error(`한 회차에 최대 ${MAX_BETS_PER_ROUND}건까지 베팅할 수 있습니다.`);
+    const limit = game === "bingo" ? BINGO_MAX_TICKETS : MAX_BETS_PER_ROUND;
+    if (existing.size >= limit) {
+      throw new Error(`한 회차에 최대 ${limit}건까지 베팅할 수 있습니다.`);
     }
     // 그래프는 회차당 한 판만 태울 수 있게 한다 (인출 판정이 단순해진다)
     if (game === "crash" && existing.size >= 1) {
       throw new Error("그래프는 회차당 한 번만 베팅할 수 있습니다.");
-    }
-    if (game === "bingo" && existing.size >= BINGO_MAX_TICKETS) {
-      throw new Error(`한 회차에 최대 ${BINGO_MAX_TICKETS}장까지 살 수 있습니다.`);
     }
 
     tx.set(betRef, { ...bet, settled: false, createdAt: now });
@@ -507,6 +505,74 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
   return results;
 }
 
+
+/**
+ * 빙고 여러 장을 한 번에 산다.
+ * 100장을 한 장씩 요청하면 느리고, 중간에 끊기면 잔액만 빠진 채로 남는다.
+ * 한 트랜잭션에서 전부 쓰거나 전부 안 쓴다.
+ */
+export async function buyBingoTickets(
+  uid: string,
+  roundId: number,
+  picksList: number[][],
+  now: number
+): Promise<{ bought: number; balance: number }> {
+  if (picksList.length === 0) throw new Error("살 장수를 지정해 주세요.");
+  if (picksList.length > BINGO_MAX_TICKETS) {
+    throw new Error(`한 번에 최대 ${BINGO_MAX_TICKETS}장까지 살 수 있습니다.`);
+  }
+  for (const picks of picksList) {
+    if (!isValidPicks(picks)) {
+      throw new Error("B·I·G·O 5개씩, N 4개씩 모두 24개를 골라야 합니다.");
+    }
+  }
+
+  const sched = await chainSchedule("bingo", now);
+  if (roundId !== sched.roundId || now >= sched.drawAt) {
+    throw new Error("이번 회차 구입이 마감되었습니다.");
+  }
+
+  const cost = TICKET_PRICE * picksList.length;
+  const db = adminDb();
+  const userRef = db.collection("users").doc(uid);
+
+  const balance = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists) throw new Error("사용자를 찾을 수 없습니다.");
+    const user = snap.data() as UserDoc;
+    if (user.balance < cost) throw new Error("잔액이 부족합니다.");
+
+    const existing = await tx.get(
+      userRef.collection("bets").where("roundId", "==", roundId).where("game", "==", "bingo")
+    );
+    if (existing.size + picksList.length > BINGO_MAX_TICKETS) {
+      throw new Error(`한 회차에 최대 ${BINGO_MAX_TICKETS}장까지 살 수 있습니다.`);
+    }
+
+    for (const picks of picksList) {
+      const ref = userRef.collection("bets").doc();
+      tx.set(ref, {
+        id: ref.id,
+        game: "bingo",
+        roundId,
+        kind: "ticket",
+        picks,
+        amount: TICKET_PRICE,
+        odds: 0,
+        settled: false,
+        createdAt: now,
+      });
+    }
+
+    tx.update(userRef, {
+      balance: FieldValue.increment(-cost),
+      staked: FieldValue.increment(cost),
+    });
+    return user.balance - cost;
+  });
+
+  return { bought: picksList.length, balance };
+}
 
 /* ── 사슬 회차 일정 (빙고 · 그래프) ──────────────── */
 
