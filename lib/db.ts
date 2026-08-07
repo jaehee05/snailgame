@@ -10,7 +10,12 @@ import {
   normalSchedule,
   settleAtOfSchedule,
 } from "./games/bingo";
-import { drawTriple, TRIPLE_PRICE, type TripleResult } from "./games/triple";
+import {
+  drawTriple,
+  MAX_TICKETS as TRIPLE_MAX,
+  TRIPLE_PRICE,
+  type TripleResult,
+} from "./games/triple";
 import { FIELD, MAX_BET, MIN_BET, START_BALANCE } from "./config";
 import { adminDb } from "./firebase-admin";
 import {
@@ -685,57 +690,77 @@ export type ScratchTicket = {
 };
 
 /**
- * 즉석복권 한 장. 회차가 없으므로 사는 즉시 결과가 정해지고 바로 정산된다.
+ * 즉석복권 구입. 회차가 없으므로 사는 즉시 결과가 정해지고 바로 정산된다.
  * 결과는 서버가 만든 문서 ID 로 만든 시드에서 나오므로 미리 알 수 없고,
  * 시드를 같이 돌려주기 때문에 사후에 직접 다시 계산해 볼 수 있다.
+ * 여러 장을 살 때는 한 트랜잭션에서 전부 쓰거나 전부 안 쓴다.
  */
-export async function buyScratch(uid: string, now: number): Promise<ScratchTicket> {
+export async function buyScratch(
+  uid: string,
+  count: number,
+  now: number
+): Promise<{ tickets: ScratchTicket[]; balance: number }> {
+  if (!Number.isInteger(count) || count < 1 || count > TRIPLE_MAX) {
+    throw new Error(`한 번에 1~${TRIPLE_MAX}장까지 살 수 있습니다.`);
+  }
+
   const db = adminDb();
   const userRef = db.collection("users").doc(uid);
-  const betRef = userRef.collection("bets").doc();
-  const seed = `${betRef.id}:${uid}`;
-  const result = drawTriple(seed);
+  const cost = TRIPLE_PRICE * count;
+  const roundId = Math.floor(now / 1000);
+
+  const drafts = Array.from({ length: count }, () => {
+    const ref = userRef.collection("bets").doc();
+    const seed = `${ref.id}:${uid}`;
+    return { ref, seed, result: drawTriple(seed) };
+  });
+  const won = drafts.reduce((sum, d) => sum + d.result.prize, 0);
 
   const balance = await db.runTransaction(async (tx) => {
     const snap = await tx.get(userRef);
     if (!snap.exists) throw new Error("사용자를 찾을 수 없습니다.");
     const user = snap.data() as UserDoc;
-    if (user.balance < TRIPLE_PRICE) throw new Error("잔액이 부족합니다.");
+    if (user.balance < cost) throw new Error("잔액이 부족합니다.");
 
-    tx.set(betRef, {
-      id: betRef.id,
-      game: "triple",
-      roundId: Math.floor(now / 1000),
-      kind: "scratch",
-      picks: [],
-      amount: TRIPLE_PRICE,
-      odds: 0,
-      settled: true,
-      hit: result.prize > 0,
-      payout: result.prize,
-      createdAt: now,
-    });
+    for (const { ref, result } of drafts) {
+      tx.set(ref, {
+        id: ref.id,
+        game: "triple",
+        roundId,
+        kind: "scratch",
+        picks: [],
+        amount: TRIPLE_PRICE,
+        odds: 0,
+        settled: true,
+        hit: result.prize > 0,
+        payout: result.prize,
+        createdAt: now,
+      });
 
-    tx.set(userRef.collection("results").doc(`triple_${betRef.id}`), {
-      game: "triple",
-      roundId: Math.floor(now / 1000),
-      summary: [result.rank, result.bonusRank],
-      staked: TRIPLE_PRICE,
-      returned: result.prize,
-      bets: [],
-      at: now,
-    });
+      tx.set(userRef.collection("results").doc(`triple_${ref.id}`), {
+        game: "triple",
+        roundId,
+        summary: [result.rank, result.bonusRank],
+        staked: TRIPLE_PRICE,
+        returned: result.prize,
+        bets: [],
+        at: now,
+      });
+    }
 
     tx.update(userRef, {
-      balance: FieldValue.increment(result.prize - TRIPLE_PRICE),
-      staked: FieldValue.increment(TRIPLE_PRICE),
-      returned: FieldValue.increment(result.prize),
+      balance: FieldValue.increment(won - cost),
+      staked: FieldValue.increment(cost),
+      returned: FieldValue.increment(won),
     });
 
-    return user.balance - TRIPLE_PRICE + result.prize;
+    return user.balance - cost + won;
   });
 
-  return { id: betRef.id, seed, result, balance, at: now };
+  return {
+    tickets: drafts.map((d) => ({ id: d.ref.id, seed: d.seed, result: d.result, balance, at: now })),
+    balance,
+  };
 }
 
 /* ── 관리자 ───────────────────────────────────────── */

@@ -1480,3 +1480,25 @@ textarea,
 .round-switch::-webkit-scrollbar { display: none; }
 .round-switch .chip { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .chip-win { border-color: rgba(242, 177, 52, 0.5); color: var(--accent-2); }
+
+.tl-buy { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+.tl-buy .primary { width: auto; padding: 12px 24px; margin: 0; }
+
+.tl-progress {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 10px;
+  flex-wrap: wrap;
+}
+
+.tl-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.tl-dot.is-done { background: var(--accent-2); }
+.tl-dot.is-now { background: var(--accent); box-shadow: 0 0 0 3px rgba(94, 232, 200, 0.18); }
+.tl-progress small { margin-left: auto; font-size: 0.75rem; }

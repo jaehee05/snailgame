@@ -27,6 +27,11 @@ import {
   TICKET_PRICE,
 } from "@/lib/games/bingo";
 
+/** 손익 표시. 부호는 반드시 손익 자체를 보고 붙인다. */
+function netLabel(net: number): string {
+  return `${net >= 0 ? "+" : ""}${formatCoins(net)}`;
+}
+
 export default function BingoPage() {
   const router = useRouter();
   const { round, prev, elapsed, error: roundError } = useRound("bingo");
@@ -306,9 +311,12 @@ export default function BingoPage() {
             <div className="panel-title">
               <h2>{viewed ? `#${viewed.roundId} 구입 내역` : "이번 회차 구입 내역"}</h2>
               {viewed ? (
-                <span className={viewed.returned > 0 ? "badge badge-ok" : "badge badge-muted"}>
-                  {viewed.bets.length}장 · {viewed.returned > 0 ? "+" : ""}
-                  {formatCoins(viewed.returned - viewed.staked)}
+                <span
+                  className={
+                    viewed.returned - viewed.staked >= 0 ? "badge badge-ok" : "badge badge-muted"
+                  }
+                >
+                  {viewed.bets.length}장 · {netLabel(viewed.returned - viewed.staked)}
                 </span>
               ) : (
                 tickets.length > 0 && (

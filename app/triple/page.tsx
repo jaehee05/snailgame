@@ -16,6 +16,7 @@ import {
 } from "@/lib/games/triple";
 
 type Ticket = { id: string; seed: string; result: TripleResult; balance: number; at: number };
+type Batch = { tickets: Ticket[]; balance: number };
 
 const PANEL_LABEL = ["게임 1 · 50억 기회", "게임 2 · 10억 기회", "게임 3 · 보너스"];
 
@@ -30,7 +31,10 @@ export default function TriplePage() {
   const [me, setMe] = useState<MeState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
-  const [ticket, setTicket] = useState<Ticket | null>(null);
+  // 여러 장을 사면 한 장씩 차례로 긁는다.
+  const [queue, setQueue] = useState<Ticket[]>([]);
+  const [index, setIndex] = useState(0);
+  const ticket = queue[index] ?? null;
   // 9칸을 하나씩 긁는다. revealed[게임][칸]
   const [revealed, setRevealed] = useState<boolean[][]>(() => blank());
   const [busy, setBusy] = useState(false);
@@ -57,21 +61,31 @@ export default function TriplePage() {
 
   const allRevealed = revealed.every((row) => row.every(Boolean));
 
-  async function buy() {
+  async function buy(count: number) {
     if (busy) return;
-    if (me && me.user.balance < TRIPLE_PRICE) return setError("잔액이 부족합니다.");
+    if (me && me.user.balance < TRIPLE_PRICE * count) return setError("잔액이 부족합니다.");
     setBusy(true);
     setError(null);
     try {
-      const t = await api<Ticket>("/api/scratch", { method: "POST" });
-      setTicket(t);
+      const b = await api<Batch>("/api/scratch", {
+        method: "POST",
+        body: JSON.stringify({ count }),
+      });
+      setQueue(b.tickets);
+      setIndex(0);
       setRevealed(blank());
-      setMe((prev) => (prev ? { ...prev, user: { ...prev.user, balance: t.balance } } : prev));
+      // 잔액은 당첨금까지 반영된 값이 서버에서 온다.
+      setMe((prev) => (prev ? { ...prev, user: { ...prev.user, balance: b.balance } } : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : "구입에 실패했습니다.");
     } finally {
       setBusy(false);
     }
+  }
+
+  function nextTicket() {
+    setIndex((i) => Math.min(queue.length - 1, i + 1));
+    setRevealed(blank());
   }
 
   function reveal(panel: number, cell: number) {
@@ -101,8 +115,20 @@ export default function TriplePage() {
         : t.result.rank > 0
           ? `${t.result.rank}등`
           : "꽝";
-    setRecent((prev) => [{ label, prize: t.result.prize }, ...prev].slice(0, 12));
+    setRecent((prev) => [{ label, prize: t.result.prize }, ...prev].slice(0, 20));
     if (t.result.prize > 0) setNotice(`${label} 당첨 · +${formatCoins(t.result.prize)} 코인`);
+  }
+
+  /** 남은 장을 전부 확인 처리한다 (한 장씩 긁기 번거로울 때) */
+  function revealRest() {
+    for (let i = index; i < queue.length; i++) if (i !== index) finish(queue[i]);
+    setRevealed([
+      [true, true, true],
+      [true, true, true],
+      [true, true, true],
+    ]);
+    if (queue[index]) finish(queue[index]);
+    setIndex(queue.length - 1);
   }
 
   if (fatal) return <GameSkeleton message={fatal} />;
@@ -120,13 +146,39 @@ export default function TriplePage() {
             <span className="badge">{formatCoins(TRIPLE_PRICE)} 코인 / 장</span>
           </div>
 
+          {queue.length > 1 && ticket && (
+            <div className="tl-progress">
+              {queue.map((_, i) => (
+                <span
+                  key={i}
+                  className={`tl-dot${i === index ? " is-now" : ""}${i < index ? " is-done" : ""}`}
+                />
+              ))}
+              <small className="muted">
+                {index + 1} / {queue.length}장
+              </small>
+            </div>
+          )}
+
           {!ticket ? (
             <div className="tl-empty">
               <span className="tl-empty-icon">🎫</span>
-              <p className="muted">한 장 사서 세 칸을 긁어 보세요.</p>
-              <button type="button" className="primary" disabled={busy} onClick={buy}>
-                {busy ? "구입 중…" : `${formatCoins(TRIPLE_PRICE)} 코인으로 한 장`}
-              </button>
+              <p className="muted">
+                한 장 {formatCoins(TRIPLE_PRICE)} 코인. 아홉 칸을 긁어 같은 심볼 3개를 찾으세요.
+              </p>
+              <div className="tl-buy">
+                {[1, 3, 5, 10].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={n === 1 ? "primary tl-again" : "chip"}
+                    disabled={busy}
+                    onClick={() => buy(n)}
+                  >
+                    {n}장
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <>
@@ -155,9 +207,16 @@ export default function TriplePage() {
 
               <div className="tl-actions">
                 {!allRevealed ? (
-                  <button type="button" className="chip" onClick={revealAll}>
-                    모두 긁기
-                  </button>
+                  <>
+                    <button type="button" className="chip" onClick={revealAll}>
+                      이 장 모두 긁기
+                    </button>
+                    {queue.length > 1 && (
+                      <button type="button" className="chip chip-ghost" onClick={revealRest}>
+                        남은 {queue.length - index}장 한번에
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <div className={`tl-result${ticket.result.prize > 0 ? " is-win" : ""}`}>
                     {ticket.result.prize > 0 ? (
@@ -174,11 +233,31 @@ export default function TriplePage() {
                     )}
                   </div>
                 )}
-                {allRevealed && (
-                  <button type="button" className="primary tl-again" disabled={busy} onClick={buy}>
-                    {busy ? "구입 중…" : "한 장 더"}
-                  </button>
-                )}
+                {allRevealed &&
+                  (index < queue.length - 1 ? (
+                    <button type="button" className="primary tl-again" onClick={nextTicket}>
+                      다음 장 ({index + 2}/{queue.length})
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="primary tl-again"
+                        disabled={busy}
+                        onClick={() => buy(queue.length)}
+                      >
+                        {busy ? "구입 중…" : `${queue.length}장 더`}
+                      </button>
+                      <button
+                        type="button"
+                        className="chip"
+                        disabled={busy}
+                        onClick={() => setQueue([])}
+                      >
+                        장수 바꾸기
+                      </button>
+                    </>
+                  ))}
               </div>
 
               <p className="muted small tl-hint">
