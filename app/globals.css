@@ -1467,3 +1467,16 @@ textarea,
 .tl-panels.is-scratching * {
   touch-action: none;
 }
+
+.round-switch {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+  scrollbar-width: none;
+}
+
+.round-switch::-webkit-scrollbar { display: none; }
+.round-switch .chip { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.chip-win { border-color: rgba(242, 177, 52, 0.5); color: var(--accent-2); }

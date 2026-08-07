@@ -22,16 +22,20 @@ import type { RoundSchedule } from "./types";
  * 실제 게임과 같은 8분 회차.
  * "구입가능시간 7분, 추첨진행 및 신규회차 생성 1분" 이라고 안내되어 있다.
  */
+const ROUND_MS = 480_000;
+/** 49개를 하나씩 다 뽑는 데 걸리는 시간 (공 하나에 약 1.1초) */
+const DRAW_MS = 54_000;
+/** 추첨이 끝나고 결과를 보는 시간 */
+const RESULT_MS = 20_000;
+
 export const BINGO_TIMING = {
-  roundMs: 480_000,
-  betMs: 420_000,
-  /** 49개를 하나씩 다 뽑는 데 걸리는 시간 (공 하나에 약 1.1초) */
-  drawMs: 54_000,
+  roundMs: ROUND_MS,
+  betMs: ROUND_MS - DRAW_MS - RESULT_MS,
+  drawMs: DRAW_MS,
 };
 
 /** 추첨이 끝나고 다음 회차가 열리기까지 결과를 보여주는 시간 */
-export const BINGO_RESULT_MS =
-  BINGO_TIMING.roundMs - BINGO_TIMING.betMs - BINGO_TIMING.drawMs;
+export const BINGO_RESULT_MS = RESULT_MS;
 
 /** 정상 진행일 때의 일정. 관리자가 바로진행을 누르면 drawAt/endAt 이 앞당겨진다. */
 export function normalSchedule(roundId: number, startAt: number): RoundSchedule {

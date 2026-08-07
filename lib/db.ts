@@ -196,7 +196,7 @@ export async function betsForRound(
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlacedBet, "id">) }));
 }
 
-export async function recentResults(uid: string, limit = 20): Promise<RoundResult[]> {
+export async function recentResults(uid: string, limit = 40): Promise<RoundResult[]> {
   const snap = await adminDb()
     .collection("users")
     .doc(uid)

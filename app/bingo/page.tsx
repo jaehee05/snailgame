@@ -35,6 +35,8 @@ export default function BingoPage() {
 
   const [picks, setPicks] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
+  // null 이면 이번 회차, 숫자면 그 회차의 구입 내역을 본다
+  const [viewing, setViewing] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 관리자가 바로진행을 누르면 추첨이 앞당겨지고, 추첨이 끝나는 대로
@@ -77,6 +79,14 @@ export default function BingoPage() {
   }, [picks]);
 
   const complete = isValidPicks(picks);
+
+  // 지난 회차 기록에는 그때 산 카드와 뽑힌 공 49개가 통째로 들어 있어서
+  // 이번 회차와 똑같은 모습으로 다시 그릴 수 있다.
+  const pastRounds = useMemo(
+    () => (me?.results ?? []).filter((r) => r.game === "bingo" && r.bets.length > 0),
+    [me?.results]
+  );
+  const viewed = viewing === null ? null : pastRounds.find((r) => r.roundId === viewing);
   // 회차가 막 바뀐 직후 이전 회차 내역이 잠깐 남아 보이지 않도록 걸러 낸다.
   const tickets = (me?.bets ?? []).filter((b) => b.roundId === round?.id);
 
@@ -294,22 +304,64 @@ export default function BingoPage() {
         <section className="bottom">
           <div className="panel">
             <div className="panel-title">
-              <h2>구입 내역</h2>
-              {tickets.length > 0 && (
-                <span className="badge">
-                  {tickets.length}장 · {formatCoins(tickets.length * TICKET_PRICE)} 코인
+              <h2>{viewed ? `#${viewed.roundId} 구입 내역` : "이번 회차 구입 내역"}</h2>
+              {viewed ? (
+                <span className={viewed.returned > 0 ? "badge badge-ok" : "badge badge-muted"}>
+                  {viewed.bets.length}장 · {viewed.returned > 0 ? "+" : ""}
+                  {formatCoins(viewed.returned - viewed.staked)}
                 </span>
+              ) : (
+                tickets.length > 0 && (
+                  <span className="badge">
+                    {tickets.length}장 · {formatCoins(tickets.length * TICKET_PRICE)} 코인
+                  </span>
+                )
               )}
             </div>
-            {tickets.length === 0 ? (
-              <p className="muted small">이번 회차에 구입한 장이 없습니다.</p>
-            ) : (
-              <div className="bcards">
-                {tickets.map((t) => (
-                  <BingoCard key={t.id} picks={t.picks} drawn={drawn} compact />
+
+            {pastRounds.length > 0 && (
+              <div className="round-switch">
+                <button
+                  type="button"
+                  className={`chip${viewing === null ? " is-admin" : ""}`}
+                  onClick={() => setViewing(null)}
+                >
+                  이번 회차
+                </button>
+                {pastRounds.slice(0, 12).map((r) => (
+                  <button
+                    key={r.roundId}
+                    type="button"
+                    className={`chip${viewing === r.roundId ? " is-admin" : ""}${
+                      r.returned > 0 ? " chip-win" : ""
+                    }`}
+                    onClick={() => setViewing(r.roundId)}
+                  >
+                    #{String(r.roundId).slice(-4)}
+                    {r.returned > 0 && " ★"}
+                  </button>
                 ))}
               </div>
             )}
+
+            {(() => {
+              const list = viewed ? viewed.bets : tickets;
+              const marks = viewed ? new Set(viewed.summary) : drawn;
+              if (list.length === 0) {
+                return (
+                  <p className="muted small">
+                    {viewed ? "이 회차에 구입한 장이 없습니다." : "이번 회차에 구입한 장이 없습니다."}
+                  </p>
+                );
+              }
+              return (
+                <div className="bcards">
+                  {list.map((t) => (
+                    <BingoCard key={t.id} picks={t.picks} drawn={marks} compact />
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           <History results={me.results} />
