@@ -87,7 +87,11 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
  * 회차 정보를 주기적으로 받아오고, 서버 시계에 맞춘 현재 시각을 돌려준다.
  * 모든 참가자가 같은 순간에 같은 결과를 보게 만드는 부분이다.
  */
-export function useRound(game: GameId, pollMs = 3000) {
+export function useRound(
+  game: GameId,
+  /** 응답을 보고 다음 조회까지 얼마나 기다릴지 정한다 (ms). 반드시 안정된 함수여야 한다. */
+  intervalFor?: (round: PublicRound, now: number) => number
+) {
   const [payload, setPayload] = useState<RoundPayload | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const offset = useRef(0);
@@ -99,22 +103,48 @@ export function useRound(game: GameId, pollMs = 3000) {
       offset.current = data.now - Date.now();
       setPayload(data);
       setError(null);
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "연결이 불안정합니다.");
+      return null;
     }
   }, [game]);
 
   useEffect(() => {
-    // 서버 응답을 기다렸다가 state 를 채우는 구독형 effect 다.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
-    refresh();
-    const poll = setInterval(refresh, pollMs);
-    const tick = setInterval(() => setNow(Date.now() + offset.current), 60);
-    return () => {
-      clearInterval(poll);
-      clearInterval(tick);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const loop = async () => {
+      if (stopped) return;
+      const data = await refresh();
+      if (stopped) return;
+      // 화면이 가려져 있으면 굳이 자주 물어보지 않는다.
+      const wait = document.hidden
+        ? 15_000
+        : data && intervalFor
+          ? intervalFor(data.round, data.now)
+          : 3_000;
+      timer = setTimeout(loop, wait);
     };
-  }, [refresh, pollMs]);
+
+     
+    loop();
+    const tick = setInterval(() => setNow(Date.now() + offset.current), 60);
+    const wake = () => {
+      if (!document.hidden) {
+        clearTimeout(timer);
+        loop();
+      }
+    };
+    document.addEventListener("visibilitychange", wake);
+
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", wake);
+    };
+  }, [refresh, intervalFor]);
 
   const round = payload?.round ?? null;
 
@@ -161,8 +191,9 @@ export function useMe(game: GameId, roundId: number | undefined, onRedirect: () 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch 완료 후에만 setState 한다
     loadMe();
-    // 회차 전환을 놓쳐도 오래 어긋나 있지 않도록 주기적으로 맞춘다.
-    const t = setInterval(loadMe, 20_000);
+    // 회차 전환을 놓쳐도 오래 어긋나 있지 않도록 가끔 맞춘다.
+    // (자주 부르면 Firestore 읽기 할당량을 금방 태운다)
+    const t = setInterval(loadMe, 60_000);
     return () => clearInterval(t);
   }, [roundId, loadMe]);
 

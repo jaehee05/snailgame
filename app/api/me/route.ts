@@ -14,7 +14,8 @@ export async function GET(req: Request) {
     const game = isRoundGameId(raw) ? raw : "snail";
 
     const now = Date.now();
-    const justSettled = await settleUser(user.uid, now);
+    // 사용자 문서는 이미 읽었으니, 미정산이 없으면 베팅을 더 읽지 않는다.
+    const justSettled = await settleUser(user.uid, now, user);
     const fresh = justSettled.length > 0 ? ((await getUser(user.uid)) ?? user) : user;
 
     // 빙고·그래프는 회차가 시계 격자가 아니라 사슬로 이어진다.

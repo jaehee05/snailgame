@@ -9,7 +9,15 @@ import { Fairness } from "@/components/Fairness";
 import { GameShell } from "@/components/GameShell";
 import { GameSkeleton } from "@/components/Skeleton";
 import { RoundHeader } from "@/components/RoundHeader";
-import { api, formatClock, formatCoins, formatMult, useMe, useRound } from "@/lib/client";
+import {
+  api,
+  formatClock,
+  formatCoins,
+  formatMult,
+  useMe,
+  useRound,
+  type PublicRound,
+} from "@/lib/client";
 import { MIN_BET } from "@/lib/config";
 import {
   CRASH_TIMING,
@@ -24,8 +32,12 @@ const AUTO_PRESETS = [1.3, 1.5, 2, 3, 5];
 
 export default function CrashPage() {
   const router = useRouter();
-  // 터지는 순간을 서버가 알려줘야 하므로 상승 중에는 자주 물어본다.
-  const { round, prev, elapsed, error: roundError } = useRound("crash", 400);
+  // 터지는 순간은 서버만 안다. 상승 중에만 촘촘히 물어보고 나머지는 느긋하게.
+  const pace = useCallback(
+    (r: PublicRound, at: number) => (at >= r.drawAt && !r.secretSeed ? 600 : 2500),
+    []
+  );
+  const { round, prev, elapsed, error: roundError } = useRound("crash", pace);
   const redirect = useCallback(() => router.replace("/login"), [router]);
   const { me, notice, setNotice, fatal, loadMe } = useMe("crash", round?.id, redirect);
 
@@ -49,7 +61,7 @@ export default function CrashPage() {
   const roundEnd = round ? round.endAt - round.start : CRASH_TIMING.betMs + CRASH_TIMING.runMs;
   const open = elapsed < CRASH_TIMING.betMs;
   const crashed = crashPoint !== null;
-  const running = !open && !crashed;
+  const isRunning = !open && !crashed;
 
   const liveMult = crashed
     ? crashPoint
@@ -63,6 +75,8 @@ export default function CrashPage() {
     const t = setTimeout(loadMe, 800);
     return () => clearTimeout(t);
   }, [crashed, round?.id, loadMe]);
+
+
 
   // 상승 중에는 "남은 시간"이라는 게 있으면 안 된다. 흐른 시간만 보여준다.
   const remaining = Math.max(0, open ? CRASH_TIMING.betMs - elapsed : roundEnd - elapsed);
@@ -143,7 +157,7 @@ export default function CrashPage() {
                 ? 1 - remaining / CRASH_TIMING.betMs
                 : Math.min(1, runElapsed / CRASH_TIMING.runMs)
             }
-            clockText={running ? formatClock(Math.max(0, runElapsed)) : undefined}
+            clockText={isRunning ? formatClock(Math.max(0, runElapsed)) : undefined}
           />
 
           <div className={`crash-stage${crashed ? " is-crashed" : ""}`}>
@@ -190,7 +204,7 @@ export default function CrashPage() {
         </section>
 
         <aside className="side">
-          <div className={`panel${open || running ? "" : " panel-locked"}`}>
+          <div className={`panel${open || isRunning ? "" : " panel-locked"}`}>
             <div className="panel-title">
               <h2>베팅</h2>
               {!open && <span className="badge badge-muted">마감</span>}
@@ -268,7 +282,7 @@ export default function CrashPage() {
 
             {error && <p className="error">{error}</p>}
 
-            {running && myBet && !cashedOut ? (
+            {isRunning && myBet && !cashedOut ? (
               <button type="button" className="primary cashout" disabled={busy} onClick={cashout}>
                 {busy ? "…" : `지금 인출 · ${formatMult(liveMult)}`}
               </button>

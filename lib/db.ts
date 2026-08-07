@@ -60,6 +60,12 @@ export type UserDoc = {
   createdAt: number;
   staked: number;
   returned: number;
+  /**
+   * 아직 정산되지 않은 베팅 수.
+   * 이게 0 이면 정산하러 베팅을 뒤질 필요가 없다. Firestore 무료 할당량은
+   * 읽기 기준이라, 접속할 때마다 베팅을 전부 읽는 것이 가장 비쌌다.
+   */
+  pending?: number;
 };
 
 /** 비밀번호 해시를 뺀, 밖으로 내보내도 되는 형태 */
@@ -201,7 +207,7 @@ export async function betsForRound(
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PlacedBet, "id">) }));
 }
 
-export async function recentResults(uid: string, limit = 40): Promise<RoundResult[]> {
+export async function recentResults(uid: string, limit = 12): Promise<RoundResult[]> {
   const snap = await adminDb()
     .collection("users")
     .doc(uid)
@@ -320,6 +326,7 @@ export async function placeBet(
     tx.update(userRef, {
       balance: FieldValue.increment(-amount),
       staked: FieldValue.increment(amount),
+      pending: FieldValue.increment(1),
     });
     return user.balance - amount;
   });
@@ -420,11 +427,21 @@ function summaryOf(outcome: GameOutcome): number[] {
  * 아직 정산되지 않은 베팅 중 결과가 확정된 회차를 찾아 정산한다.
  * 별도 크론 없이, 사용자가 접속할 때마다 밀린 회차를 따라잡는 방식이다.
  */
-export async function settleUser(uid: string, now: number): Promise<RoundResult[]> {
+export async function settleUser(
+  uid: string,
+  now: number,
+  user?: UserDoc
+): Promise<RoundResult[]> {
+  // 미정산이 없다고 이미 알고 있으면 베팅을 아예 읽지 않는다.
+  if (user && user.pending === 0) return [];
+
   const db = adminDb();
   const userRef = db.collection("users").doc(uid);
   const pending = await userRef.collection("bets").where("settled", "==", false).get();
-  if (pending.empty) return [];
+  if (pending.empty) {
+    if (user?.pending !== 0) await userRef.update({ pending: 0 });
+    return [];
+  }
 
   const [bingo, crash] = await Promise.all([chainSchedule("bingo", now), chainSchedule("crash", now)]);
   const chainFinished = (game: ChainGameId, roundId: number) => {
@@ -507,6 +524,10 @@ export async function settleUser(uid: string, now: number): Promise<RoundResult[
     if (result) results.push(result);
   }
 
+  // 남은 미정산 수를 다시 적어 둔다 (다음 접속 때 헛읽지 않도록)
+  const settledCount = results.reduce((n, r) => n + r.bets.length, 0);
+  await userRef.update({ pending: Math.max(0, pending.size - settledCount) });
+
   return results;
 }
 
@@ -572,6 +593,7 @@ export async function buyBingoTickets(
     tx.update(userRef, {
       balance: FieldValue.increment(-cost),
       staked: FieldValue.increment(cost),
+      pending: FieldValue.increment(picksList.length),
     });
     return user.balance - cost;
   });
@@ -633,8 +655,11 @@ export async function chainSchedule(
   now: number,
   fresh = false
 ): Promise<RoundSchedule> {
+  // 회차가 끝나기 전까지는 다시 읽지 않는다. 그래프는 회차 중에 바뀔 일이
+  // 아예 없고, 빙고는 관리자 바로진행이 있어 5초까지만 믿는다.
   const hit = cachedSchedule[game];
-  if (!fresh && hit && now - hit.at < 2_000 && now < hit.value.endAt) return hit.value;
+  const maxAge = game === "crash" ? 10 * 60_000 : 5_000;
+  if (!fresh && hit && now < hit.value.endAt && now - hit.at < maxAge) return hit.value;
 
   const ref = adminDb().collection("control").doc(game);
   const next = await adminDb().runTransaction(async (tx) => {
